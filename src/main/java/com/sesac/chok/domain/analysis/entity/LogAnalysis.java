@@ -2,7 +2,6 @@ package com.sesac.chok.domain.analysis.entity;
 
 import com.sesac.chok.domain.log.entity.BglLog;
 import com.sesac.chok.global.type.Domain;
-import com.sesac.chok.global.type.RiskLevel;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -45,9 +44,9 @@ public class LogAnalysis {
     @Column(nullable = false)
     private Domain domain;
 
-    @Enumerated(EnumType.STRING)
+    /** 위험도(긴급·높음·보통·낮음). FastAPI가 산출한 한글 값을 그대로 저장·전달한다. */
     @Column(name = "risk_level", nullable = false)
-    private RiskLevel riskLevel;
+    private String riskLevel;
 
     @Column(columnDefinition = "TEXT")
     private String summary;

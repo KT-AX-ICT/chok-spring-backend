@@ -46,8 +46,8 @@ public class BglLog {
     @Column(name = "log_type")
     private String logType;
 
-    @Column(name = "log_ts")
-    private LocalDateTime logTs;
+    @Column(name = "occurred_at")
+    private LocalDateTime occurredAt;
 
     @Column(name = "log_level")
     private String logLevel;

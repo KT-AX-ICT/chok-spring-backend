@@ -9,7 +9,6 @@ import com.sesac.chok.domain.analysis.repository.LogAnalysisRepository;
 import com.sesac.chok.domain.log.entity.BglLog;
 import com.sesac.chok.global.dto.PageResponse;
 import com.sesac.chok.global.type.Domain;
-import com.sesac.chok.global.type.RiskLevel;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -34,7 +33,7 @@ class AnalysisServiceTest {
     void mapsAnalysisWithNestedLogAndParsesResponsePlan() {
         BglLog log = BglLog.builder()
                 .id(1001L)
-                .logTs(LocalDateTime.of(2026, 6, 18, 8, 30, 0))
+                .occurredAt(LocalDateTime.of(2026, 6, 18, 8, 30, 0))
                 .node("R02-M1-N0-C:J12-U11")
                 .component("KERNEL")
                 .logType("RAS")
@@ -46,7 +45,7 @@ class AnalysisServiceTest {
                 .id(501L)
                 .log(log)
                 .domain(Domain.BGL)
-                .riskLevel(RiskLevel.HIGH)
+                .riskLevel("높음")
                 .summary("커널 데이터 TLB 오류 반복")
                 .analysis("동일 노드에서 단시간 다수 TLB 오류 발생")
                 .action("[\"노드 격리/점검\", \"메모리 컨트롤러 진단\"]")
@@ -66,7 +65,7 @@ class AnalysisServiceTest {
         AnalysisDto dto = result.content().get(0);
         assertThat(dto.analysisId()).isEqualTo(501L);
         assertThat(dto.domain()).isEqualTo(Domain.BGL);
-        assertThat(dto.riskLevel()).isEqualTo(RiskLevel.HIGH);
+        assertThat(dto.riskLevel()).isEqualTo("높음");
         assertThat(dto.aiSummary()).isEqualTo("커널 데이터 TLB 오류 반복");
         assertThat(dto.analysis()).isEqualTo("동일 노드에서 단시간 다수 TLB 오류 발생");
         assertThat(dto.responsePlan()).containsExactly("노드 격리/점검", "메모리 컨트롤러 진단");
@@ -86,9 +85,9 @@ class AnalysisServiceTest {
     @Test
     void marksLogAsNotCautionWhenLabelIsDash() {
         BglLog log = BglLog.builder().id(2002L).label("-")
-                .logTs(LocalDateTime.of(2026, 6, 18, 9, 0, 0)).build();
+                .occurredAt(LocalDateTime.of(2026, 6, 18, 9, 0, 0)).build();
         LogAnalysis entity = LogAnalysis.builder()
-                .id(502L).log(log).domain(Domain.BGL).riskLevel(RiskLevel.LOW)
+                .id(502L).log(log).domain(Domain.BGL).riskLevel("낮음")
                 .summary("정상").analysis("이상 없음").action("점검 불필요")
                 .analyzedAt(LocalDateTime.of(2026, 6, 18, 9, 1, 0))
                 .createdAt(LocalDateTime.of(2026, 6, 18, 9, 1, 0))

@@ -35,7 +35,7 @@ public class AnalysisService {
     private AnalysisDto.LogInfo toLogInfo(BglLog log) {
         return new AnalysisDto.LogInfo(
                 log.getId(),
-                log.getLogTs(),
+                log.getOccurredAt(),
                 log.getNode(),
                 log.getComponent(),
                 log.getLogType(),

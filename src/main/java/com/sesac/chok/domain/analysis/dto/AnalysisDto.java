@@ -1,7 +1,6 @@
 package com.sesac.chok.domain.analysis.dto;
 
 import com.sesac.chok.global.type.Domain;
-import com.sesac.chok.global.type.RiskLevel;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -11,7 +10,7 @@ import java.util.List;
 public record AnalysisDto(
         Long analysisId,
         Domain domain,
-        RiskLevel riskLevel,
+        String riskLevel,
         String aiSummary,
         String analysis,
         List<String> responsePlan,

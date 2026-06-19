@@ -9,7 +9,6 @@ import com.sesac.chok.domain.analysis.repository.LogAnalysisRepository;
 import com.sesac.chok.domain.log.entity.BglLog;
 import com.sesac.chok.domain.log.repository.BglLogRepository;
 import com.sesac.chok.global.type.Domain;
-import com.sesac.chok.global.type.RiskLevel;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -41,7 +40,7 @@ class AnalysisIntegrationTest {
 
     private BglLog savedLog(String node, String label) {
         return bglLogRepository.save(BglLog.builder()
-                .logTs(TS)
+                .occurredAt(TS)
                 .node(node)
                 .component("KERNEL")
                 .logType("RAS")
@@ -56,7 +55,7 @@ class AnalysisIntegrationTest {
         return LogAnalysis.builder()
                 .log(log)
                 .domain(Domain.BGL)
-                .riskLevel(RiskLevel.HIGH)
+                .riskLevel("높음")
                 .summary("요약")
                 .analysis("분석")
                 .action("[]")
@@ -82,7 +81,7 @@ class AnalysisIntegrationTest {
                 .andExpect(jsonPath("$.content[0].analysisId").value(newer.getId()))
                 .andExpect(jsonPath("$.content[0].aiSummary").value("analyzed-later"))
                 .andExpect(jsonPath("$.content[0].domain").value("BGL"))
-                .andExpect(jsonPath("$.content[0].riskLevel").value("HIGH"))
+                .andExpect(jsonPath("$.content[0].riskLevel").value("높음"))
                 .andExpect(jsonPath("$.content[0].log.logId").value(newerLog.getId()))
                 .andExpect(jsonPath("$.content[0].log.node").value("node-NEWER"))
                 .andExpect(jsonPath("$.content[0].log.occurredAt").value("2026-06-18T08:30:00"))
