@@ -1,6 +1,8 @@
 package com.sesac.chok.domain.dashboard.service;
 
 import com.sesac.chok.domain.dashboard.dto.DashboardResponse;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -9,26 +11,30 @@ import org.springframework.stereotype.Service;
 @Service
 public class DashboardService {
 
-    public DashboardResponse getDashboard(String date) {
-        log.info("[Dashboard] returning mock response - real aggregation pending, date={}", date);
+    private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
+
+    public DashboardResponse getDashboard(LocalDateTime date) {
+        LocalDateTime endAt = date != null ? date.withNano(0) : LocalDateTime.now().withNano(0);
+        LocalDateTime startAt = endAt.minusHours(24);
+        log.info("[Dashboard] returning mock response - real aggregation pending, startAt={}, endAt={}", startAt, endAt);
 
         // TODO: Replace mock data after LogService/AnalysisService/PatternService dashboard query methods are implemented.
         return new DashboardResponse(
-                mockRange(),
+                mockRange(startAt, endAt),
                 mockStats(),
-                mockTimeSeries(),
+                mockTimeSeries(endAt),
                 mockRiskDistribution(),
                 mockTypeDistribution(),
                 mockComponentDistribution(),
                 mockLevelDistribution(),
-                mockRecentCautionLogs(),
+                mockRecentCautionLogs(endAt),
                 mockRecentPatterns()
         );
     }
 
     // TODO: Replace mock data after LogService/AnalysisService/PatternService dashboard query methods are implemented.
-    private DashboardResponse.Range mockRange() {
-        return new DashboardResponse.Range("2026-06-19T00:00:00", "2026-06-19T23:59:59");
+    private DashboardResponse.Range mockRange(LocalDateTime startAt, LocalDateTime endAt) {
+        return new DashboardResponse.Range(format(startAt), format(endAt));
     }
 
     // TODO: Replace mock data after LogService/AnalysisService/PatternService dashboard query methods are implemented.
@@ -37,11 +43,11 @@ public class DashboardService {
     }
 
     // TODO: Replace mock data after LogService/AnalysisService/PatternService dashboard query methods are implemented.
-    private List<DashboardResponse.TimeSeriesItem> mockTimeSeries() {
+    private List<DashboardResponse.TimeSeriesItem> mockTimeSeries(LocalDateTime endAt) {
         return List.of(
-                new DashboardResponse.TimeSeriesItem("2026-06-19T06:00:00", 480, 9),
-                new DashboardResponse.TimeSeriesItem("2026-06-19T07:00:00", 515, 10),
-                new DashboardResponse.TimeSeriesItem("2026-06-19T08:00:00", 540, 12)
+                new DashboardResponse.TimeSeriesItem(format(endAt.minusHours(2)), 480, 9),
+                new DashboardResponse.TimeSeriesItem(format(endAt.minusHours(1)), 515, 10),
+                new DashboardResponse.TimeSeriesItem(format(endAt), 540, 12)
         );
     }
 
@@ -80,11 +86,11 @@ public class DashboardService {
     }
 
     // TODO: Replace mock data after LogService/AnalysisService/PatternService dashboard query methods are implemented.
-    private List<DashboardResponse.RecentCautionLog> mockRecentCautionLogs() {
+    private List<DashboardResponse.RecentCautionLog> mockRecentCautionLogs(LocalDateTime endAt) {
         return List.of(
                 new DashboardResponse.RecentCautionLog(
                         1001L,
-                        "2026-06-19T08:51:00",
+                        format(endAt.minusMinutes(9)),
                         "R02-M1-N0-C:J12-U11",
                         "KERNEL",
                         "FATAL",
@@ -96,7 +102,7 @@ public class DashboardService {
                 ),
                 new DashboardResponse.RecentCautionLog(
                         1002L,
-                        "2026-06-19T08:57:00",
+                        format(endAt.minusMinutes(3)),
                         "R03-M0-N1-C:J04-U03",
                         "KERNEL",
                         "ERROR",
@@ -115,5 +121,9 @@ public class DashboardService {
                 new DashboardResponse.RecentPattern(12L, "Data TLB Error", 87, "HIGH", 90),
                 new DashboardResponse.RecentPattern(13L, "Application Read Error", 42, "MEDIUM", 72)
         );
+    }
+
+    private String format(LocalDateTime dateTime) {
+        return dateTime.format(DATE_TIME_FORMATTER);
     }
 }
