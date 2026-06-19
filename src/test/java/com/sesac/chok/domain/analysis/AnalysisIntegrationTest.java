@@ -48,6 +48,7 @@ class AnalysisIntegrationTest {
                 .logLevel("FATAL")
                 .label(label)
                 .content("data TLB error interrupt")
+                .createdAt(TS)
                 .build());
     }
 

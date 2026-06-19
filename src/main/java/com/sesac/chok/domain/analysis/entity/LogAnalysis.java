@@ -61,8 +61,8 @@ public class LogAnalysis {
     @Column(name = "cluster_id")
     private Long clusterId;
 
-    /** 분석 생성 시점. (DB 컬럼명 {@code analzed_at} — ERD 철자 그대로 매핑) */
-    @Column(name = "analzed_at", nullable = false)
+    /** 분석 생성 시점. */
+    @Column(name = "analyzed_at", nullable = false)
     private LocalDateTime analyzedAt;
 
     /** DB 적재 시점. */

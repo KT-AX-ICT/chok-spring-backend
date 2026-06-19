@@ -58,6 +58,6 @@ public class BglLog {
     @Column(name = "event_id")
     private String eventId;
 
-    @Column(name = "created_at")
+    @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 }
