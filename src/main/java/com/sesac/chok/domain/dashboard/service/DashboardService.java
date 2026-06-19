@@ -28,7 +28,7 @@ public class DashboardService {
 
     // TODO: Replace mock data after LogService/AnalysisService/PatternService dashboard query methods are implemented.
     private DashboardResponse.Range mockRange() {
-        return new DashboardResponse.Range("2026-06-17T09:00:00", "2026-06-18T09:00:00");
+        return new DashboardResponse.Range("2026-06-19T00:00:00", "2026-06-19T23:59:59");
     }
 
     // TODO: Replace mock data after LogService/AnalysisService/PatternService dashboard query methods are implemented.
@@ -39,9 +39,9 @@ public class DashboardService {
     // TODO: Replace mock data after LogService/AnalysisService/PatternService dashboard query methods are implemented.
     private List<DashboardResponse.TimeSeriesItem> mockTimeSeries() {
         return List.of(
-                new DashboardResponse.TimeSeriesItem("2026-06-18T06:00:00", 480, 9),
-                new DashboardResponse.TimeSeriesItem("2026-06-18T07:00:00", 515, 10),
-                new DashboardResponse.TimeSeriesItem("2026-06-18T08:00:00", 540, 12)
+                new DashboardResponse.TimeSeriesItem("2026-06-19T06:00:00", 480, 9),
+                new DashboardResponse.TimeSeriesItem("2026-06-19T07:00:00", 515, 10),
+                new DashboardResponse.TimeSeriesItem("2026-06-19T08:00:00", 540, 12)
         );
     }
 
@@ -84,7 +84,7 @@ public class DashboardService {
         return List.of(
                 new DashboardResponse.RecentCautionLog(
                         1001L,
-                        "2026-06-18T08:51:00",
+                        "2026-06-19T08:51:00",
                         "R02-M1-N0-C:J12-U11",
                         "KERNEL",
                         "FATAL",
@@ -96,7 +96,7 @@ public class DashboardService {
                 ),
                 new DashboardResponse.RecentCautionLog(
                         1002L,
-                        "2026-06-18T08:57:00",
+                        "2026-06-19T08:57:00",
                         "R03-M0-N1-C:J04-U03",
                         "KERNEL",
                         "ERROR",
