@@ -19,6 +19,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.CreationTimestamp;
 
 /**
  * AI 로그 진단/분석 결과 ({@code log_analysis}).
@@ -64,7 +65,8 @@ public class LogAnalysis {
     @Column(name = "analyzed_at", nullable = false)
     private LocalDateTime analyzedAt;
 
-    /** DB 적재 시점. */
-    @Column(name = "created_at", nullable = false)
+    /** DB 적재 시점. 영속화 시점에 Hibernate가 자동 기록한다. */
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 }

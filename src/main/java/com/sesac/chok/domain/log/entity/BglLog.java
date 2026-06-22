@@ -12,6 +12,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.CreationTimestamp;
 
 /**
  * BGL 원시 로그 ({@code bgl_log}). 정상/이상 판정 기준인 {@code label}을 그대로 보존한다.
@@ -58,6 +59,8 @@ public class BglLog {
     @Column(name = "event_id")
     private String eventId;
 
-    @Column(name = "created_at", nullable = false)
+    /** DB 적재 시점. 영속화 시점에 Hibernate가 자동 기록한다. */
+    @CreationTimestamp
+    @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 }
