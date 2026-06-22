@@ -36,6 +36,10 @@ public class LogSeedService {
         }
 
         List<BglLog> logs = bglLogCsvParser.parse(openSeed());
+        // [학습 메모] BglLog가 GenerationType.IDENTITY라 Hibernate가 JDBC batch insert를 못 하고
+        // 여기서 row 수만큼 개별 INSERT가 나간다. 시연용 2,000건은 기동에 1초 미만이라 그대로 둔다.
+        // 현업에서 대량 seed/적재라면: ① IDENTITY 대신 SEQUENCE/TABLE 전략 + hibernate.jdbc.batch_size로 배치,
+        // ② JDBC bulk insert(또는 DB 네이티브 COPY/LOAD DATA), ③ Flyway/Liquibase 등 마이그레이션 도구로 분리.
         bglLogRepository.saveAll(logs);
         log.info("BGL seed data loaded: {} rows.", logs.size());
     }
