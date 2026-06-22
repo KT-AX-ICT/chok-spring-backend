@@ -20,6 +20,7 @@ import java.util.function.Function;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * 대시보드 집계 서비스.
@@ -47,6 +48,7 @@ public class DashboardService {
     private final BglLogRepository bglLogRepository;
     private final LogAnalysisRepository logAnalysisRepository;
 
+    @Transactional(readOnly = true)
     public DashboardResponse getDashboard(LocalDateTime startAt, LocalDateTime endAt, String interval) {
         LocalDateTime calculatedEndAt = endAt != null ? endAt : LocalDateTime.now().withNano(0);
         LocalDateTime calculatedStartAt = startAt != null ? startAt : calculatedEndAt.minusHours(24);
