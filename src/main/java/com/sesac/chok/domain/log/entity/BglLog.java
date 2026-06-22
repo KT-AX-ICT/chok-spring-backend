@@ -29,8 +29,9 @@ public class BglLog {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "status")
-    private String status;
+    /** 1차 이상탐지 결과. {@code log_level == FATAL}이면 true(이상) → 2차(Python) 분석 대상. */
+    @Column(name = "is_fatal", nullable = false)
+    private boolean isFatal;
 
     @Column(name = "label")
     private String label;
