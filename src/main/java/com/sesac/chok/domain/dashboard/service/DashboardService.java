@@ -1,150 +1,229 @@
 package com.sesac.chok.domain.dashboard.service;
 
+import com.sesac.chok.domain.analysis.repository.LogAnalysisRepository;
 import com.sesac.chok.domain.dashboard.dto.DashboardResponse;
+import com.sesac.chok.domain.log.entity.BglLog;
+import com.sesac.chok.domain.log.repository.BglLogRepository;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.function.Function;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+/**
+ * 대시보드 집계 서비스.
+ *
+ * <p>{@link BglLogRepository}에서 {@code [startAt, endAt)} 범위의 로그를 한 번 조회해, 그 위에서
+ * 시간대 버킷팅·label 기반 caution 카운트·key별 분포·최근 주의 로그를 Java로 집계한다.
+ * interval이 가변(1h/5m/1d)이고 H2·MySQL을 모두 쓰므로 DB 날짜함수 대신 Java 버킷팅을 쓴다(이식성).
+ *
+ * <p>BglLog로 만드는 필드(총/주의 카운트, timeSeries, type/component/level 분포)와
+ * log_analysis로 만드는 필드(riskDistribution, analyzedLogCount, recentCautionLog.isAnalysis)를
+ * 각각 실집계한다. recentPatterns는 pattern 도메인 연결 전까지 mock으로 둔다.
+ */
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class DashboardService {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
+    private static final String NORMAL_LABEL = "-";
+    private static final int RECENT_CAUTION_LIMIT = 5;
+    private static final int MAX_BUCKETS = 200;
+    // 도넛 고정 순서/구성 (PROJECT_CONTEXT riskLevel ENUM). 데이터에 없는 등급도 0으로 노출.
+    private static final List<String> RISK_LEVELS = List.of("긴급", "높음", "보통", "낮음");
+
+    private final BglLogRepository bglLogRepository;
+    private final LogAnalysisRepository logAnalysisRepository;
 
     public DashboardResponse getDashboard(LocalDateTime startAt, LocalDateTime endAt, String interval) {
         LocalDateTime calculatedEndAt = endAt != null ? endAt : LocalDateTime.now().withNano(0);
         LocalDateTime calculatedStartAt = startAt != null ? startAt : calculatedEndAt.minusHours(24);
         String calculatedInterval = interval != null && !interval.isBlank() ? interval : "1h";
+
+        List<BglLog> rows = bglLogRepository
+                .findByOccurredAtGreaterThanEqualAndOccurredAtLessThanOrderByOccurredAtAsc(
+                        calculatedStartAt, calculatedEndAt);
+        List<LogAnalysisRepository.RiskLevelCount> riskCounts =
+                logAnalysisRepository.countByRiskLevelInRange(calculatedStartAt, calculatedEndAt);
+        // 분석 완료 수: 범위 내 log_analysis row 합계 (로그당 분석 1건 가정).
+        int analyzedCount = riskCounts.stream().mapToInt(r -> (int) r.getCount()).sum();
+
         log.info(
-                "[Dashboard] returning mock response - real aggregation pending, startAt={}, endAt={}, interval={}",
-                calculatedStartAt,
-                calculatedEndAt,
-                calculatedInterval
+                "[Dashboard] aggregated from {} bgl_log rows, {} analyses, startAt={}, endAt={}, interval={}",
+                rows.size(), analyzedCount, calculatedStartAt, calculatedEndAt, calculatedInterval
         );
 
-        // TODO: Replace mock data after LogService/AnalysisService/PatternService dashboard query methods are implemented.
         return new DashboardResponse(
-                mockRange(calculatedStartAt, calculatedEndAt),
-                mockStats(),
-                mockTimeSeries(calculatedStartAt, calculatedEndAt, calculatedInterval),
-                mockRiskDistribution(),
-                mockTypeDistribution(),
-                mockComponentDistribution(),
-                mockLevelDistribution(),
-                mockRecentCautionLogs(calculatedEndAt),
+                range(calculatedStartAt, calculatedEndAt),
+                aggregateStats(rows, analyzedCount),
+                aggregateTimeSeries(rows, calculatedStartAt, calculatedEndAt, calculatedInterval),
+                aggregateRiskDistribution(riskCounts),
+                aggregateTypeDistribution(rows),
+                aggregateComponentDistribution(rows),
+                aggregateLevelDistribution(rows),
+                aggregateRecentCautionLogs(rows),
                 mockRecentPatterns()
         );
     }
 
-    // TODO: Remove after LogService range aggregation is implemented.
-    private DashboardResponse.Range mockRange(LocalDateTime startAt, LocalDateTime endAt) {
-        return new DashboardResponse.Range(format(startAt), format(endAt));
+    // ---------------------------------------------------------------------
+    // 집계 로직 (BglLog 단일 입력 기준)
+    // ---------------------------------------------------------------------
+
+    private static boolean isCaution(String label) {
+        return label != null && !NORMAL_LABEL.equals(label);
     }
 
-    // TODO: Remove after LogService total/caution count aggregation and AnalysisService analyzed count aggregation are implemented.
-    private DashboardResponse.Stats mockStats() {
-        return new DashboardResponse.Stats(15_234, 312, 9_000);
+    private DashboardResponse.Stats aggregateStats(List<BglLog> rows, int analyzedCount) {
+        int total = rows.size();
+        int caution = (int) rows.stream().filter(r -> isCaution(r.getLabel())).count();
+        return new DashboardResponse.Stats(total, caution, analyzedCount);
     }
 
-    // TODO: Remove after LogService interval bucket aggregation is implemented.
-    private List<DashboardResponse.TimeSeriesItem> mockTimeSeries(
-            LocalDateTime startAt,
-            LocalDateTime endAt,
-            String interval
-    ) {
-        Duration bucketSize = parseInterval(interval);
-        List<DashboardResponse.TimeSeriesItem> items = new ArrayList<>();
-        LocalDateTime bucketAt = startAt;
-        int bucketIndex = 0;
+    /** log_analysis.risk_level GROUP BY 결과를 4단계 고정 순서(없는 등급 0)로 구성한다. */
+    private List<DashboardResponse.RiskDistributionItem> aggregateRiskDistribution(
+            List<LogAnalysisRepository.RiskLevelCount> riskCounts) {
+        Map<String, Integer> byLevel = new HashMap<>();
+        for (LogAnalysisRepository.RiskLevelCount c : riskCounts) {
+            if (c.getRiskLevel() != null) {
+                byLevel.merge(c.getRiskLevel(), (int) c.getCount(), Integer::sum);
+            }
+        }
+        LinkedHashMap<String, Integer> ordered = new LinkedHashMap<>();
+        RISK_LEVELS.forEach(level -> ordered.put(level, byLevel.getOrDefault(level, 0)));
+        byLevel.forEach(ordered::putIfAbsent); // 예상 외 등급도 누락 없이 노출
+        return ordered.entrySet().stream()
+                .map(e -> new DashboardResponse.RiskDistributionItem(e.getKey(), e.getValue()))
+                .toList();
+    }
 
-        while (!bucketAt.isAfter(endAt) && items.size() < 25) {
-            items.add(new DashboardResponse.TimeSeriesItem(
-                    format(bucketAt),
-                    480 + bucketIndex * 15,
-                    9 + bucketIndex
-            ));
-            bucketAt = bucketAt.plus(bucketSize);
-            bucketIndex++;
+    /**
+     * 시간 버킷 집계. 동등 SQL 예시:
+     * <pre>
+     * SELECT bucket(occurred_at, :interval) AS time,
+     *        COUNT(*)                       AS totalCount,
+     *        SUM(CASE WHEN label &lt;&gt; '-' THEN 1 ELSE 0 END) AS cautionCount
+     * FROM bgl_log
+     * WHERE occurred_at &gt;= :startAt AND occurred_at &lt; :endAt
+     * GROUP BY time ORDER BY time
+     * </pre>
+     * 빈 버킷도 0으로 노출해야 line/area 차트가 빈 구간에서 바닥(0)으로 내려간다(보간 방지).
+     */
+    private List<DashboardResponse.TimeSeriesItem> aggregateTimeSeries(
+            List<BglLog> rows, LocalDateTime startAt, LocalDateTime endAt, String interval) {
+        Duration bucket = parseInterval(interval);
+
+        // 빈 버킷도 0으로 노출하기 위한 스켈레톤. [startAt, endAt) 기준이라 endAt에서 시작하는 버킷은 제외.
+        List<LocalDateTime> bucketStarts = new ArrayList<>();
+        LocalDateTime at = startAt;
+        while (at.isBefore(endAt) && bucketStarts.size() < MAX_BUCKETS) {
+            bucketStarts.add(at);
+            at = at.plus(bucket);
+        }
+        if (bucketStarts.isEmpty()) {
+            bucketStarts.add(startAt);
         }
 
-        if (items.isEmpty()) {
-            items.add(new DashboardResponse.TimeSeriesItem(format(endAt), 480, 9));
+        int n = bucketStarts.size();
+        int[] total = new int[n];
+        int[] caution = new int[n];
+        long bucketSeconds = Math.max(bucket.getSeconds(), 1);
+
+        for (BglLog r : rows) {
+            LocalDateTime occurredAt = r.getOccurredAt();
+            if (occurredAt == null || occurredAt.isBefore(startAt) || !occurredAt.isBefore(endAt)) {
+                continue;
+            }
+            int idx = (int) (Duration.between(startAt, occurredAt).getSeconds() / bucketSeconds);
+            if (idx < 0 || idx >= n) {
+                continue;
+            }
+            total[idx]++;
+            if (isCaution(r.getLabel())) {
+                caution[idx]++;
+            }
         }
 
+        List<DashboardResponse.TimeSeriesItem> items = new ArrayList<>(n);
+        for (int k = 0; k < n; k++) {
+            items.add(new DashboardResponse.TimeSeriesItem(format(bucketStarts.get(k)), total[k], caution[k]));
+        }
         return items;
     }
 
-    // TODO: Remove after AnalysisService risk distribution aggregation is implemented.
-    private List<DashboardResponse.RiskDistributionItem> mockRiskDistribution() {
-        return List.of(
-                new DashboardResponse.RiskDistributionItem("긴급", 100),
-                new DashboardResponse.RiskDistributionItem("높음", 400),
-                new DashboardResponse.RiskDistributionItem("보통", 1_100),
-                new DashboardResponse.RiskDistributionItem("낮음", 7_400)
-        );
+    private List<DashboardResponse.TypeDistributionItem> aggregateTypeDistribution(List<BglLog> rows) {
+        return countByDesc(rows, BglLog::getLogType).entrySet().stream()
+                .map(e -> new DashboardResponse.TypeDistributionItem(e.getKey(), e.getValue()))
+                .toList();
     }
 
-    // TODO: Remove after LogService type distribution aggregation is implemented.
-    private List<DashboardResponse.TypeDistributionItem> mockTypeDistribution() {
-        return List.of(
-                new DashboardResponse.TypeDistributionItem("RAS", 4_200),
-                new DashboardResponse.TypeDistributionItem("KERNEL", 1_180)
-        );
+    private List<DashboardResponse.ComponentDistributionItem> aggregateComponentDistribution(List<BglLog> rows) {
+        return countByDesc(rows, BglLog::getComponent).entrySet().stream()
+                .map(e -> new DashboardResponse.ComponentDistributionItem(e.getKey(), e.getValue()))
+                .toList();
     }
 
-    // TODO: Remove after LogService component distribution aggregation is implemented.
-    private List<DashboardResponse.ComponentDistributionItem> mockComponentDistribution() {
-        return List.of(
-                new DashboardResponse.ComponentDistributionItem("KERNEL", 8_800),
-                new DashboardResponse.ComponentDistributionItem("MMCS", 950)
-        );
+    private List<DashboardResponse.LevelDistributionItem> aggregateLevelDistribution(List<BglLog> rows) {
+        return countByDesc(rows, BglLog::getLogLevel).entrySet().stream()
+                .map(e -> new DashboardResponse.LevelDistributionItem(e.getKey(), e.getValue()))
+                .toList();
     }
 
-    // TODO: Remove after LogService level distribution aggregation is implemented.
-    private List<DashboardResponse.LevelDistributionItem> mockLevelDistribution() {
-        return List.of(
-                new DashboardResponse.LevelDistributionItem("INFO", 14_000),
-                new DashboardResponse.LevelDistributionItem("WARNING", 780),
-                new DashboardResponse.LevelDistributionItem("ERROR", 312),
-                new DashboardResponse.LevelDistributionItem("FATAL", 120),
-                new DashboardResponse.LevelDistributionItem("SEVERE", 18),
-                new DashboardResponse.LevelDistributionItem("FAILURE", 6)
-        );
+    private List<DashboardResponse.RecentCautionLog> aggregateRecentCautionLogs(List<BglLog> rows) {
+        List<BglLog> recent = rows.stream()
+                .filter(r -> isCaution(r.getLabel()) && r.getOccurredAt() != null)
+                .sorted(Comparator.comparing(BglLog::getOccurredAt).reversed())
+                .limit(RECENT_CAUTION_LIMIT)
+                .toList();
 
+        // isAnalysis: 해당 로그에 log_analysis row가 있는지 일괄 조회
+        List<Long> logIds = recent.stream().map(BglLog::getId).filter(Objects::nonNull).toList();
+        Set<Long> analyzedIds = logIds.isEmpty()
+                ? Set.of()
+                : new HashSet<>(logAnalysisRepository.findAnalyzedLogIds(logIds));
+
+        return recent.stream()
+                .map(r -> new DashboardResponse.RecentCautionLog(
+                        r.getId(), format(r.getOccurredAt()), r.getNode(), r.getComponent(),
+                        r.getLogLevel(), r.getLogType(), r.getLabel(), true,
+                        analyzedIds.contains(r.getId()), r.getContent()))
+                .toList();
     }
 
-    // TODO: Remove after LogService recent caution log query is implemented.
-    private List<DashboardResponse.RecentCautionLog> mockRecentCautionLogs(LocalDateTime endAt) {
-        return List.of(
-                new DashboardResponse.RecentCautionLog(
-                        1001L,
-                        format(endAt.minusMinutes(9)),
-                        "R02-M1-N0-C:J12-U11",
-                        "KERNEL",
-                        "FATAL",
-                        "RAS",
-                        "KERNDTLB",
-                        true,
-                        true,
-                        "data TLB error interrupt"
-                ),
-                new DashboardResponse.RecentCautionLog(
-                        1002L,
-                        format(endAt.minusMinutes(3)),
-                        "R03-M0-N1-C:J04-U03",
-                        "KERNEL",
-                        "ERROR",
-                        "RAS",
-                        "APPREAD",
-                        true,
-                        false,
-                        "application read error detected"
-                )
-        );
+    /** key별 count를 내림차순으로 정렬해 반환. 동등 SQL: {@code GROUP BY key ORDER BY COUNT(*) DESC}. */
+    private static LinkedHashMap<String, Integer> countByDesc(List<BglLog> rows, Function<BglLog, String> key) {
+        Map<String, Integer> counts = new HashMap<>();
+        for (BglLog r : rows) {
+            String k = key.apply(r);
+            if (k != null) {
+                counts.merge(k, 1, Integer::sum);
+            }
+        }
+        LinkedHashMap<String, Integer> ordered = new LinkedHashMap<>();
+        counts.entrySet().stream()
+                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
+                .forEach(e -> ordered.put(e.getKey(), e.getValue()));
+        return ordered;
+    }
+
+    // ---------------------------------------------------------------------
+    // 범위 echo + analysis/pattern 파생 mock (해당 도메인 연결 전까지 유지)
+    // ---------------------------------------------------------------------
+
+    private DashboardResponse.Range range(LocalDateTime startAt, LocalDateTime endAt) {
+        return new DashboardResponse.Range(format(startAt), format(endAt));
     }
 
     // TODO: Remove after PatternService recent pattern query is implemented.
@@ -155,8 +234,11 @@ public class DashboardService {
         );
     }
 
+    // ---------------------------------------------------------------------
+    // interval 파싱 헬퍼
+    // ---------------------------------------------------------------------
+
     private Duration parseInterval(String interval) {
-        // TODO: Replace this mock parser with API-level interval validation when real LogService bucketing is connected.
         String normalized = interval.toLowerCase();
         try {
             if (normalized.endsWith("m")) {
@@ -169,7 +251,7 @@ public class DashboardService {
                 return positiveOrDefault(Duration.ofDays(parseIntervalAmount(normalized)));
             }
         } catch (NumberFormatException ignored) {
-            log.info("[Dashboard] unsupported interval value for mock timeSeries, fallback to 1h. interval={}", interval);
+            log.info("[Dashboard] unsupported interval value, fallback to 1h. interval={}", interval);
         }
         return Duration.ofHours(1);
     }
@@ -182,7 +264,7 @@ public class DashboardService {
         if (duration.isPositive()) {
             return duration;
         }
-        log.info("[Dashboard] non-positive interval value for mock timeSeries, fallback to 1h.");
+        log.info("[Dashboard] non-positive interval value, fallback to 1h.");
         return Duration.ofHours(1);
     }
 
