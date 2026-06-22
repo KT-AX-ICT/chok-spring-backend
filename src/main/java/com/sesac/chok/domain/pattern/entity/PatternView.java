@@ -15,17 +15,17 @@ import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 
 /**
- * 반복 패턴 클러스터 ({@code pattern_cluster}).
- * <p>FastAPI(ChromaDB) 군집 결과를 보관한다. {@code log_analysis.cluster_id}가 이 PK를 참조하나
- * 현재 연관관계 없이 스칼라 FK로만 연결한다(미배정 가능 → nullable).
+ * 반복 패턴 뷰 ({@code pattern_view}).
+ * <p>FastAPI(ChromaDB) 군집 결과를 보관한다. {@code log_analysis.cluster_id}가 이 PK를 참조하며,
+ * 미분류 건은 Python이 {@code 99}로 채워 보낸다(연관관계 없이 스칼라 FK로 연결).
  */
 @Entity
-@Table(name = "pattern_cluster")
+@Table(name = "pattern_view")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor(access = AccessLevel.PRIVATE)
 @Builder
-public class PatternCluster {
+public class PatternView {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

@@ -15,6 +15,7 @@ import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -87,7 +88,7 @@ class AnalysisResultSaveTest {
                 "요약",
                 "분석",
                 "[]",
-                null,
+                99L, // 미분류 sentinel
                 null); // batch 응답 누락 → Spring fallback(now)
 
         Long savedId = analysisService.saveAnalysisResult(command);
@@ -107,10 +108,29 @@ class AnalysisResultSaveTest {
                 "요약",
                 "분석",
                 "[]",
-                null,
+                99L,
                 ANALYZED_AT);
 
         assertThatThrownBy(() -> analysisService.saveAnalysisResult(command))
                 .isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    void rejectsNullClusterId() {
+        // 미분류 건은 Python이 99로 채워 보낸다 → cluster_id는 NOT NULL. null 적재는 거부돼야 한다.
+        BglLog target = persistTargetLog();
+        LogAnalysis withNullCluster = LogAnalysis.builder()
+                .log(target)
+                .domain(Domain.BGL)
+                .riskLevel("낮음")
+                .summary("요약")
+                .analysis("분석")
+                .action("[]")
+                .clusterId(null)
+                .analyzedAt(ANALYZED_AT)
+                .build();
+
+        assertThatThrownBy(() -> logAnalysisRepository.saveAndFlush(withNullCluster))
+                .isInstanceOf(DataIntegrityViolationException.class);
     }
 }

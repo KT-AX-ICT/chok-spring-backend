@@ -63,6 +63,7 @@ class CreatedAtAuditTest {
                 .summary("요약")
                 .analysis("분석")
                 .action("[]")
+                .clusterId(99L) // cluster_id NOT NULL (미분류 sentinel)
                 .analyzedAt(TS)
                 .build());
 
