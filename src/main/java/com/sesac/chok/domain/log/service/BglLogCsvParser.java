@@ -13,7 +13,8 @@ import org.springframework.stereotype.Component;
 /**
  * 시연용 BGL CSV(헤더 {@code LineId,Label,Timestamp,Date,Node,Time,NodeRepeat,Type,Component,Level,Content})를
  * {@link BglLog}로 변환한다. Content에 콤마가 포함된 행은 따옴표로 quoting되어 있어 RFC-4180 방식으로 파싱한다.
- * <p>정상/이상 분류는 {@code Label} 컬럼(첫 라벨)을 그대로 보존하며 AI 추론을 하지 않는다.
+ * <p>{@code label}(첫 컬럼)은 정확도 검증 기준(답지)으로 원본 그대로 보존한다. 정상/이상 판정은
+ * 1차 FATAL 필터 + 2차 FastAPI 분석으로 추후 산출하며, 이 파서는 판정하지 않는다.
  */
 @Component
 public class BglLogCsvParser {

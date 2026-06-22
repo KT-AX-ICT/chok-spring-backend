@@ -104,7 +104,9 @@ $env:SPRING_PROFILES_ACTIVE="prod"
 
 - `global.config.DataInitializer`(ApplicationRunner)가 시작 시 `domain.log.service.LogSeedService.initializeIfEmpty()`를 호출합니다.
 - `bgl_log`가 **비어 있을 때만** CSV를 파싱해 적재하고, 이미 데이터가 있으면 건너뜁니다(중복 적재 방지).
-- 정상/이상은 AI가 판단하지 않고 **`Label` 첫 컬럼** 기준으로 보존합니다(`-` 정상, 그 외 이상). `is_fatal`은 `Level == FATAL` 여부로 저장합니다.
+- `label`(BGL 첫 컬럼)은 **정확도 검증용 기준(답지)** 으로 적재만 합니다 — 정상/이상 판정 근거가 아닙니다.
+- `is_fatal`은 `Level == FATAL` 여부로 저장하며, 이후 **1차 필터**(FastAPI 2차 분석 대상 선별)에 사용됩니다.
+- 정상/이상 판정(status)은 1차(FATAL 필터) + 2차(FastAPI 분석)로 **추후 산출**하며, seed 단계에선 저장하지 않습니다. 정확도 검증(P0-6)은 `label`(답지) ↔ 분석 status 비교로 수행합니다. (기획서 v2.0 기준)
 
 재적재가 필요하면 DB를 비우고 재시작합니다. dev profile의 in-memory H2는 애플리케이션 재시작 시 자동으로 초기화됩니다.
 
