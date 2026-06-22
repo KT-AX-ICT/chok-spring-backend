@@ -18,7 +18,12 @@ import org.springframework.stereotype.Component;
 @Component
 public class BglLogCsvParser {
 
-    /** 예: {@code 2026-06-22-00.09.21.588637} (마이크로초 6자리). */
+    /**
+     * 예: {@code 2026-06-22-00.09.21.588637}.
+     * <p><b>주의</b>: {@code SSSSSS}는 마이크로초 <b>정확히 6자리</b> 고정이다. seed CSV를 재생성할 때
+     * 분수 자릿수가 달라지면(예: trailing zero 제거, 초 단위) {@code DateTimeParseException}이 난다.
+     * 현재 seed는 6자리로 고정이라 그대로 두며, 포맷이 바뀌면 가변 분수(appendFraction)로 전환할 것.
+     */
     private static final DateTimeFormatter TIME_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd-HH.mm.ss.SSSSSS");
 
@@ -37,13 +42,23 @@ public class BglLogCsvParser {
     public List<BglLog> parse(Reader reader) {
         List<BglLog> logs = new ArrayList<>();
         try (BufferedReader br = new BufferedReader(reader)) {
-            br.readLine(); // 헤더 스킵
+            br.readLine(); // 첫 줄(헤더) 스킵. 헤더 없는 CSV가 들어오면 첫 데이터 행이 누락되니 주의.
             String line;
+            int lineNumber = 1; // 헤더가 1번 줄
             while ((line = br.readLine()) != null) {
+                lineNumber++;
                 if (line.isBlank()) {
                     continue;
                 }
-                logs.add(toBglLog(splitCsv(line)));
+                List<String> fields = splitCsv(line);
+                if (fields.size() != COLUMN_COUNT) {
+                    // seed CSV는 외부에서 가공해 교체될 수 있으므로, 컬럼 수가 어긋나면
+                    // 크래시(AIOOBE/NPE) 대신 줄 번호를 담은 명확한 예외로 실패한다.
+                    throw new IllegalStateException(
+                            "BGL seed CSV %d번째 줄 컬럼 수 불일치: expected %d, actual %d (라인: %s)"
+                                    .formatted(lineNumber, COLUMN_COUNT, fields.size(), line));
+                }
+                logs.add(toBglLog(fields));
             }
         } catch (java.io.IOException e) {
             throw new UncheckedIOException("BGL seed CSV 읽기 실패", e);
@@ -51,26 +66,25 @@ public class BglLogCsvParser {
         return logs;
     }
 
-    private BglLog toBglLog(String[] f) {
-        String level = f[COL_LEVEL];
+    private BglLog toBglLog(List<String> f) {
+        String level = f.get(COL_LEVEL);
         return BglLog.builder()
-                .label(f[COL_LABEL])
-                .node(f[COL_NODE])
-                .occurredAt(LocalDateTime.parse(f[COL_TIME], TIME_FORMAT))
-                .nodeRepeat(f[COL_NODE_REPEAT])
-                .logType(f[COL_TYPE])
-                .component(f[COL_COMPONENT])
+                .label(f.get(COL_LABEL))
+                .node(f.get(COL_NODE))
+                .occurredAt(LocalDateTime.parse(f.get(COL_TIME), TIME_FORMAT))
+                .nodeRepeat(f.get(COL_NODE_REPEAT))
+                .logType(f.get(COL_TYPE))
+                .component(f.get(COL_COMPONENT))
                 .logLevel(level)
-                .content(f[COL_CONTENT])
+                .content(f.get(COL_CONTENT))
                 .isFatal(FATAL.equals(level))
                 .build();
     }
 
     /** RFC-4180 최소 구현: 따옴표로 감싼 필드의 콤마/이스케이프 따옴표("")를 처리한다. */
-    private String[] splitCsv(String line) {
-        String[] fields = new String[COLUMN_COUNT];
+    private List<String> splitCsv(String line) {
+        List<String> fields = new ArrayList<>();
         StringBuilder field = new StringBuilder();
-        int index = 0;
         boolean inQuotes = false;
         for (int i = 0; i < line.length(); i++) {
             char c = line.charAt(i);
@@ -88,13 +102,13 @@ public class BglLogCsvParser {
             } else if (c == '"') {
                 inQuotes = true;
             } else if (c == ',') {
-                fields[index++] = field.toString();
+                fields.add(field.toString());
                 field.setLength(0);
             } else {
                 field.append(c);
             }
         }
-        fields[index] = field.toString();
+        fields.add(field.toString());
         return fields;
     }
 }

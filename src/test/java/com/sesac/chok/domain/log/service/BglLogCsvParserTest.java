@@ -1,6 +1,7 @@
 package com.sesac.chok.domain.log.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.sesac.chok.domain.log.entity.BglLog;
 import java.io.StringReader;
@@ -80,6 +81,27 @@ class BglLogCsvParserTest {
         BglLog log = parser.parse(new StringReader(csv)).get(0);
 
         assertThat(log.getContent()).isEqualTo("CE sym 2, at 0x0b85eee0, mask 0x05");
+    }
+
+    @Test
+    void rejectsRowWithTooManyFieldsWithLineNumber() {
+        String csv = HEADER + "\n"
+                + "1,-,1782086961,2026.06.22,R02-M1-N0-C:J12-U11,2026-06-22-00.09.21.588637,"
+                + "R02-M1-N0-C:J12-U11,RAS,KERNEL,INFO,unquoted comma, breaks columns\n";
+
+        assertThatThrownBy(() -> parser.parse(new StringReader(csv)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("2"); // 헤더 다음 데이터 줄 번호
+    }
+
+    @Test
+    void rejectsRowWithTooFewFieldsWithLineNumber() {
+        String csv = HEADER + "\n"
+                + "1,-,1782086961,2026.06.22,R02-M1-N0-C:J12-U11\n";
+
+        assertThatThrownBy(() -> parser.parse(new StringReader(csv)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("2");
     }
 
     @Test
