@@ -3,8 +3,7 @@ package com.sesac.chok.global.config;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatNoException;
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
+import com.sesac.chok.domain.log.service.LogSeedService;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -13,27 +12,35 @@ import org.springframework.stereotype.Component;
 
 class DataInitializerTest {
 
-    @Test
-    void dataInitializerIsApplicationRunnerComponentWithoutInjectedDependencies() {
-        assertThat(DataInitializer.class)
-                .isAssignableTo(ApplicationRunner.class)
-                .hasAnnotation(Component.class);
+    /** 호출 위임만 검증하기 위한 테스트 더블. 실제 파싱/저장은 하지 않는다. */
+    private static class RecordingLogSeedService extends LogSeedService {
+        private int initializeCount = 0;
 
-        assertThat(DataInitializer.class.getDeclaredConstructors())
-                .singleElement()
-                .satisfies(constructor -> assertThat(constructor.getParameterCount()).isZero());
+        RecordingLogSeedService() {
+            super(null, null);
+        }
 
-        assertThat(DataInitializer.class.getDeclaredFields())
-                .filteredOn(field -> !Modifier.isStatic(field.getModifiers()))
-                .extracting(Field::getName)
-                .isEmpty();
+        @Override
+        public void initializeIfEmpty() {
+            initializeCount++;
+        }
     }
 
     @Test
-    void runLeavesSeedLoadingAsNoOpTrigger() {
-        DataInitializer dataInitializer = new DataInitializer();
+    void dataInitializerIsApplicationRunnerComponent() {
+        assertThat(DataInitializer.class)
+                .isAssignableTo(ApplicationRunner.class)
+                .hasAnnotation(Component.class);
+    }
+
+    @Test
+    void runDelegatesSeedLoadingToLogSeedService() {
+        RecordingLogSeedService seedService = new RecordingLogSeedService();
+        DataInitializer dataInitializer = new DataInitializer(seedService);
         ApplicationArguments args = new DefaultApplicationArguments();
 
         assertThatNoException().isThrownBy(() -> dataInitializer.run(args));
+
+        assertThat(seedService.initializeCount).isEqualTo(1);
     }
 }

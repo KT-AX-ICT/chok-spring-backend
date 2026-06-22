@@ -92,6 +92,24 @@ $env:SPRING_PROFILES_ACTIVE="prod"
 .\gradlew.bat bootRun
 ```
 
+## Seed 데이터 적재
+
+애플리케이션 시작 시 시연용 BGL 로그를 자동으로 초기 적재합니다.
+
+- **데이터 파일**: `src/main/resources/seed/BGL_2k_chain_scenario_v2.csv` (헤더 포함 2,001줄 / 데이터 2,000건)
+- **출처**: Notion 내부문서 "시연용 BGL 데이터". Loghub BGL 2k 기반이며, **타임스탬프만 2026-06-22 ~ 2026-06-26 범위로 조정**하고 Content·노드·컴포넌트는 원본 그대로 보존합니다.
+- **CSV 컬럼**: `LineId,Label,Timestamp,Date,Node,Time,NodeRepeat,Type,Component,Level,Content` (Content에 콤마가 있는 행은 따옴표로 quoting)
+
+동작 방식:
+
+- `global.config.DataInitializer`(ApplicationRunner)가 시작 시 `domain.log.service.LogSeedService.initializeIfEmpty()`를 호출합니다.
+- `bgl_log`가 **비어 있을 때만** CSV를 파싱해 적재하고, 이미 데이터가 있으면 건너뜁니다(중복 적재 방지).
+- 정상/이상은 AI가 판단하지 않고 **`Label` 첫 컬럼** 기준으로 보존합니다(`-` 정상, 그 외 이상). `is_fatal`은 `Level == FATAL` 여부로 저장합니다.
+
+재적재가 필요하면 DB를 비우고 재시작합니다. dev profile의 in-memory H2는 애플리케이션 재시작 시 자동으로 초기화됩니다.
+
+> 데이터 가공(타임스탬프 조정 등)은 프로젝트 밖에서 수행하고, 확정된 CSV만 `resources/seed`에 올립니다. 원본/가공 보관본은 공유 저장소에 커밋하지 않습니다.
+
 ## 프로젝트 범위
 
 P0 범위는 다음 흐름을 우선합니다.
@@ -155,11 +173,11 @@ P0 범위는 다음 흐름을 우선합니다.
 - FastAPI 호출용 WebClient bean
 - 전역 예외 처리
 - 패키지별 담당/책임 README
+- BGL 시연 seed 적재 (`DataInitializer` → `LogSeedService`)
 
 아직 미구현:
 
 - 각 도메인의 Entity/Repository/Service/Controller
-- BGL seed loader
 - FastAPI 요청/응답 DTO
 - Scheduler job
 - 실제 조회 API
