@@ -42,7 +42,7 @@ class AnalysisControllerTest {
         given(analysisService.getAnalysisList(any(Pageable.class)))
                 .willReturn(new PageResponse<>(List.of(dto), 0, 50, 1, 1, true, true));
 
-        mockMvc.perform(get("/analysis"))
+        mockMvc.perform(get("/api/v1/analysis"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].analysisId").value(501))
                 .andExpect(jsonPath("$.content[0].domain").value("BGL"))
