@@ -18,7 +18,8 @@ public record AnalysisDto(
 
     /**
      * 분석 대상 원시 로그 요약(대시보드 recentCautionLogs와 동일 필드 세트).
-     * {@code isCaution}은 {@code label != '-'} 파생값이다.
+     * {@code isCaution}은 시스템 판정 기준 파생값({@link com.sesac.chok.domain.log.entity.BglLog#caution}).
+     * {@code label}(답지)은 평가지표 전용이라 응답에 노출하지 않는다.
      */
     public record LogInfo(
             Long logId,
@@ -27,7 +28,6 @@ public record AnalysisDto(
             String component,
             String logType,
             String logLevel,
-            String label,
             String content,
             boolean isCaution) {
     }
