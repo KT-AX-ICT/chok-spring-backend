@@ -15,7 +15,8 @@ import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 
 /**
- * BGL 원시 로그 ({@code bgl_log}). 정상/이상 판정 기준인 {@code label}을 그대로 보존한다.
+ * BGL 원시 로그 ({@code bgl_log}). {@code label}은 정확도 검증용 답지(평가지표)로 보존하되 응답에는
+ * 노출하지 않는다. 정상/이상 판정은 2차 결과인 {@code isAbnormal}을 따른다.
  */
 @Entity
 @Table(name = "bgl_log")
@@ -72,5 +73,21 @@ public class BglLog {
     /** 2차(FastAPI) 분석 결과로 이상/정상 판정을 채운다(적재 후 결과 도착 시 갱신). */
     public void updateAbnormal(Boolean isAbnormal) {
         this.isAbnormal = isAbnormal;
+    }
+
+    /**
+     * 시스템 판정 기준 주의 여부(프론트 노출용 파생값). 정본 규칙은 여기 한 곳에 둔다.
+     * <ul>
+     *   <li>2차 이상({@code isAbnormal == true}) → 주의</li>
+     *   <li>2차 전({@code isAbnormal == null})이라도 1차 FATAL이면 주의(안전망)</li>
+     *   <li>2차 정상({@code isAbnormal == false})이면 FATAL이어도 비주의(2차 우선)</li>
+     * </ul>
+     */
+    public static boolean caution(Boolean isAbnormal, String logLevel) {
+        return Boolean.TRUE.equals(isAbnormal) || (isAbnormal == null && "FATAL".equals(logLevel));
+    }
+
+    public boolean isCaution() {
+        return caution(this.isAbnormal, this.logLevel);
     }
 }
