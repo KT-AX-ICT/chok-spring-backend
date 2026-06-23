@@ -22,7 +22,7 @@ public class LogService {
     public PageResponse<LogSummary> getLogs(LogSearchCondition cond, Pageable pageable) {
         return PageResponse.of(bglLogRepository.searchLogs(
                 cond.startAt(), cond.endAt(), cond.riskLevel(), cond.logType(), cond.component(),
-                cond.logLevel(), cond.label(), cond.keyword(), cond.isCaution(), cond.isAnalysis(),
+                cond.logLevel(), cond.keyword(), cond.isCaution(), cond.isAnalysis(),
                 pageable));
     }
 }

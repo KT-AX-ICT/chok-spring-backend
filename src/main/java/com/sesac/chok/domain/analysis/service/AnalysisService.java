@@ -72,13 +72,7 @@ public class AnalysisService {
                 log.getComponent(),
                 log.getLogType(),
                 log.getLogLevel(),
-                log.getLabel(),
                 log.getContent(),
-                isCaution(log.getLabel()));
-    }
-
-    /** 주의 로그 판정: {@code label}이 alert('-'가 아님)이면 true. (§5) */
-    private boolean isCaution(String label) {
-        return label != null && !"-".equals(label);
+                log.isCaution()); // 시스템 판정 기준(2차 이상 또는 2차 전 FATAL)
     }
 }
