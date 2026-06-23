@@ -28,8 +28,6 @@ public class BglLogCsvParser {
     private static final DateTimeFormatter TIME_FORMAT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd-HH.mm.ss.SSSSSS");
 
-    private static final String FATAL = "FATAL";
-
     private static final int COL_LABEL = 1;
     private static final int COL_NODE = 4;
     private static final int COL_TIME = 5;
@@ -78,7 +76,6 @@ public class BglLogCsvParser {
                 .component(f.get(COL_COMPONENT))
                 .logLevel(level)
                 .content(f.get(COL_CONTENT))
-                .isFatal(FATAL.equals(level))
                 .build();
     }
 

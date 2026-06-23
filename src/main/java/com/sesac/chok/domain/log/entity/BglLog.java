@@ -29,9 +29,13 @@ public class BglLog {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** 1차 이상탐지 결과. {@code log_level == FATAL}이면 true(이상) → 2차(Python) 분석 대상. */
-    @Column(name = "is_fatal", nullable = false)
-    private boolean isFatal;
+    /**
+     * 2차(FastAPI) 분석 결과. {@code true}=이상, {@code false}=정상.
+     * 적재 시점엔 {@code null}(미분석)이고, 2차 분석 결과 응답 시 {@link #updateAbnormal(Boolean)}로 갱신한다.
+     * 1차 FATAL 판정({@code log_level == FATAL})은 FastAPI 전송 여부만 정하고 저장하지 않는다(파생값).
+     */
+    @Column(name = "is_abnormal")
+    private Boolean isAbnormal;
 
     @Column(name = "label")
     private String label;
@@ -64,4 +68,9 @@ public class BglLog {
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
+    /** 2차(FastAPI) 분석 결과로 이상/정상 판정을 채운다(적재 후 결과 도착 시 갱신). */
+    public void updateAbnormal(Boolean isAbnormal) {
+        this.isAbnormal = isAbnormal;
+    }
 }
