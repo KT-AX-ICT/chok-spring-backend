@@ -2,8 +2,12 @@ package com.sesac.chok.global.config;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatNoException;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
+import com.sesac.chok.domain.log.service.BglTemplateSeedService;
 import com.sesac.chok.domain.log.service.LogSeedService;
+import com.sesac.chok.domain.pattern.service.PatternViewSeedService;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -11,20 +15,6 @@ import org.springframework.boot.DefaultApplicationArguments;
 import org.springframework.stereotype.Component;
 
 class DataInitializerTest {
-
-    /** 호출 위임만 검증하기 위한 테스트 더블. 실제 파싱/저장은 하지 않는다. */
-    private static class RecordingLogSeedService extends LogSeedService {
-        private int initializeCount = 0;
-
-        RecordingLogSeedService() {
-            super(null, null);
-        }
-
-        @Override
-        public void initializeIfEmpty() {
-            initializeCount++;
-        }
-    }
 
     @Test
     void dataInitializerIsApplicationRunnerComponent() {
@@ -34,13 +24,17 @@ class DataInitializerTest {
     }
 
     @Test
-    void runDelegatesSeedLoadingToLogSeedService() {
-        RecordingLogSeedService seedService = new RecordingLogSeedService();
-        DataInitializer dataInitializer = new DataInitializer(seedService);
+    void runDelegatesEachSeedLoadingToItsService() {
+        BglTemplateSeedService templateSeed = mock(BglTemplateSeedService.class);
+        PatternViewSeedService patternSeed = mock(PatternViewSeedService.class);
+        LogSeedService logSeed = mock(LogSeedService.class);
+        DataInitializer dataInitializer = new DataInitializer(templateSeed, patternSeed, logSeed);
         ApplicationArguments args = new DefaultApplicationArguments();
 
         assertThatNoException().isThrownBy(() -> dataInitializer.run(args));
 
-        assertThat(seedService.initializeCount).isEqualTo(1);
+        verify(templateSeed).initializeIfEmpty();
+        verify(patternSeed).initializeIfEmpty();
+        verify(logSeed).initializeIfEmpty();
     }
 }

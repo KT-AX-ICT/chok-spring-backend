@@ -37,6 +37,7 @@ public class AnalysisService {
     public Long saveAnalysisResult(AnalysisResultCommand command) {
         BglLog log = bglLogRepository.findById(command.logId())
                 .orElseThrow(() -> NotFoundException.of("bgl_log", command.logId()));
+        log.updateAbnormal(command.isAbnormal()); // 2차 결과 도착 → 대상 로그 이상/정상 판정 갱신
 
         LogAnalysis saved = logAnalysisRepository.save(LogAnalysis.builder()
                 .log(log)

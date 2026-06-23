@@ -75,7 +75,7 @@ class AnalysisIntegrationTest {
         repository.save(base(savedLog("node-OLDER", "KERNDTLB")).summary("analyzed-earlier")
                 .analyzedAt(LocalDateTime.of(2026, 6, 18, 8, 0, 0)).build());
 
-        mockMvc.perform(get("/analysis"))
+        mockMvc.perform(get("/api/v1/analysis"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(2))
                 .andExpect(jsonPath("$.content[0].analysisId").value(newer.getId()))
@@ -96,7 +96,7 @@ class AnalysisIntegrationTest {
     void marksLogAsNotCautionWhenLabelIsDash() throws Exception {
         repository.save(base(savedLog("node-N", "-")).build());
 
-        mockMvc.perform(get("/analysis"))
+        mockMvc.perform(get("/api/v1/analysis"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].log.isCaution").value(false));
     }
@@ -106,7 +106,7 @@ class AnalysisIntegrationTest {
         // JSON 배열 포맷
         repository.save(base(savedLog("node-J", "KERNDTLB")).action("[\"노드 격리\", \"보드 교체\"]").build());
 
-        mockMvc.perform(get("/analysis"))
+        mockMvc.perform(get("/api/v1/analysis"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].responsePlan.length()").value(2))
                 .andExpect(jsonPath("$.content[0].responsePlan[0]").value("노드 격리"))
@@ -117,7 +117,7 @@ class AnalysisIntegrationTest {
         // 줄바꿈 구분 포맷
         repository.save(base(savedLog("node-K", "KERNDTLB")).action("점검 실행\n재시작\n로그 확인").build());
 
-        mockMvc.perform(get("/analysis"))
+        mockMvc.perform(get("/api/v1/analysis"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].responsePlan.length()").value(3))
                 .andExpect(jsonPath("$.content[0].responsePlan[0]").value("점검 실행"))
@@ -126,7 +126,7 @@ class AnalysisIntegrationTest {
 
     @Test
     void returnsEmptyContentWhenNoData() throws Exception {
-        mockMvc.perform(get("/analysis"))
+        mockMvc.perform(get("/api/v1/analysis"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(0))
                 .andExpect(jsonPath("$.totalElements").value(0))
@@ -140,7 +140,7 @@ class AnalysisIntegrationTest {
         repository.save(base(savedLog("node-2", "KERNDTLB")).build());
         repository.save(base(savedLog("node-3", "KERNDTLB")).build());
 
-        mockMvc.perform(get("/analysis").param("page", "0").param("size", "2"))
+        mockMvc.perform(get("/api/v1/analysis").param("page", "0").param("size", "2"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content.length()").value(2))
                 .andExpect(jsonPath("$.page").value(0))

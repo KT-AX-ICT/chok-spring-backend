@@ -61,7 +61,8 @@ class AnalysisResultSaveTest {
                 "동일 노드에서 단시간 다수 TLB 오류 발생",
                 "[\"노드 격리\", \"메모리 진단\"]",
                 7L,
-                ANALYZED_AT);
+                ANALYZED_AT,
+                true);
 
         Long savedId = analysisService.saveAnalysisResult(command);
 
@@ -89,7 +90,8 @@ class AnalysisResultSaveTest {
                 "분석",
                 "[]",
                 99L, // 미분류 sentinel
-                null); // batch 응답 누락 → Spring fallback(now)
+                null, // batch 응답 누락 → Spring fallback(now)
+                false);
 
         Long savedId = analysisService.saveAnalysisResult(command);
 
@@ -109,10 +111,33 @@ class AnalysisResultSaveTest {
                 "분석",
                 "[]",
                 99L,
-                ANALYZED_AT);
+                ANALYZED_AT,
+                true);
 
         assertThatThrownBy(() -> analysisService.saveAnalysisResult(command))
                 .isInstanceOf(NotFoundException.class);
+    }
+
+    @Test
+    void updatesTargetLogAbnormalVerdict() {
+        // 적재 직후엔 미분석(null) → 분석 결과 적재 시 대상 로그 is_abnormal이 판정값으로 갱신된다.
+        BglLog target = persistTargetLog();
+        assertThat(target.getIsAbnormal()).isNull();
+        AnalysisResultCommand command = new AnalysisResultCommand(
+                target.getId(),
+                Domain.BGL,
+                "높음",
+                "요약",
+                "분석",
+                "[]",
+                7L,
+                ANALYZED_AT,
+                false); // FATAL이지만 2차에서 정상 재분류
+
+        analysisService.saveAnalysisResult(command);
+
+        BglLog reloaded = bglLogRepository.findById(target.getId()).orElseThrow();
+        assertThat(reloaded.getIsAbnormal()).isFalse();
     }
 
     @Test

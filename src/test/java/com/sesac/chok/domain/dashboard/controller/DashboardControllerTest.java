@@ -161,7 +161,7 @@ class DashboardControllerTest {
                 .logType("RAS")
                 .logLevel(logLevel)
                 .content("test log")
-                .isFatal(fatal)
+                .isAbnormal(fatal)
                 .build();
     }
 }
