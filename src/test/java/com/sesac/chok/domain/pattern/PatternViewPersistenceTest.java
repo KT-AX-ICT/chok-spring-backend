@@ -25,6 +25,7 @@ class PatternViewPersistenceTest {
     @Test
     void persistsRoundTrip() {
         PatternView saved = patternViewRepository.save(PatternView.builder()
+                .id(12L) // id는 assigned(cluster 번호) — 직접 지정해야 한다
                 .patternName("Data TLB Error")
                 .description("커널 데이터 TLB 오류 군집")
                 .eventTemplate("data TLB error interrupt")
@@ -43,6 +44,7 @@ class PatternViewPersistenceTest {
     void createdAtIsAutoPopulatedOnSave() {
         // createdAt 미설정 — 자동 채움이 없으면 NOT NULL 위반으로 저장 실패한다.
         PatternView saved = patternViewRepository.save(PatternView.builder()
+                .id(13L) // id는 assigned — 직접 지정
                 .patternName("Network Timeout")
                 .importance(40)
                 .build());

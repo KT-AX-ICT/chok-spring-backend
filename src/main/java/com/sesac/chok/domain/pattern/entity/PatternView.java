@@ -2,8 +2,6 @@ package com.sesac.chok.domain.pattern.entity;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
@@ -18,6 +16,8 @@ import org.hibernate.annotations.CreationTimestamp;
  * 반복 패턴 뷰 ({@code pattern_view}).
  * <p>FastAPI(ChromaDB) 군집 결과를 보관한다. {@code log_analysis.cluster_id}가 이 PK를 참조하며,
  * 미분류 건은 Python이 {@code 99}로 채워 보낸다(연관관계 없이 스칼라 FK로 연결).
+ * <p><b>{@code id}는 자동 채번이 아니라 cluster 번호(assigned)</b> — seed·런타임 모두 Python이 부여한
+ * cluster 번호(0·99 포함)를 그대로 PK로 쓴다(surrogate가 아니라 의미 있는 키라 IDENTITY 미사용).
  */
 @Entity
 @Table(name = "pattern_view")
@@ -27,8 +27,8 @@ import org.hibernate.annotations.CreationTimestamp;
 @Builder
 public class PatternView {
 
+    /** cluster 번호(Python 부여, 0·99 포함). 자동 생성이 아닌 assigned 키 — 적재 전 직접 채워야 한다. */
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     /** 클러스터 제목. */

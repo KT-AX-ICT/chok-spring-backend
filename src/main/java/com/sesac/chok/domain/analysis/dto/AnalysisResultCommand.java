@@ -16,6 +16,8 @@ import java.time.LocalDateTime;
  * @param action     대응 방안(원본 포맷 보존, 조회 시 파싱)
  * @param clusterId  패턴({@code pattern_view}) 번호. 미분류는 99(Python이 채워 보냄) — 항상 존재(NOT NULL)
  * @param analyzedAt 분석 생성 시각. batch 응답 누락 시 {@code null} → 서비스가 적재 시각으로 fallback
+ * @param isAbnormal 2차 이상 판정. {@code true}=이상/{@code false}=정상. 대상 로그({@code bgl_log})의
+ *                   {@code is_abnormal}을 갱신한다. 누락 가능성 대비 {@code Boolean}(nullable)
  */
 public record AnalysisResultCommand(
         Long logId,
@@ -25,5 +27,6 @@ public record AnalysisResultCommand(
         String analysis,
         String action,
         long clusterId,
-        LocalDateTime analyzedAt) {
+        LocalDateTime analyzedAt,
+        Boolean isAbnormal) {
 }
