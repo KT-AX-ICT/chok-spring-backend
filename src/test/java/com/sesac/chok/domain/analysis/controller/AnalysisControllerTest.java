@@ -34,7 +34,7 @@ class AnalysisControllerTest {
     void returnsAnalysisListWithContentKey() throws Exception {
         AnalysisDto.LogInfo logInfo = new AnalysisDto.LogInfo(
                 1001L, LocalDateTime.of(2026, 6, 18, 8, 30, 0), "R02-M1-N0-C:J12-U11",
-                "KERNEL", "RAS", "FATAL", "KERNDTLB", "data TLB error interrupt", true);
+                "KERNEL", "RAS", "FATAL", "data TLB error interrupt", true);
         AnalysisDto dto = new AnalysisDto(
                 501L, Domain.BGL, "높음",
                 "커널 데이터 TLB 오류 반복", "동일 노드 다수 발생",
@@ -42,7 +42,7 @@ class AnalysisControllerTest {
         given(analysisService.getAnalysisList(any(Pageable.class)))
                 .willReturn(new PageResponse<>(List.of(dto), 0, 50, 1, 1, true, true));
 
-        mockMvc.perform(get("/analysis"))
+        mockMvc.perform(get("/api/v1/analysis"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].analysisId").value(501))
                 .andExpect(jsonPath("$.content[0].domain").value("BGL"))
@@ -54,7 +54,7 @@ class AnalysisControllerTest {
                 .andExpect(jsonPath("$.content[0].log.node").value("R02-M1-N0-C:J12-U11"))
                 .andExpect(jsonPath("$.content[0].log.component").value("KERNEL"))
                 .andExpect(jsonPath("$.content[0].log.logLevel").value("FATAL"))
-                .andExpect(jsonPath("$.content[0].log.label").value("KERNDTLB"))
+                .andExpect(jsonPath("$.content[0].log.label").doesNotExist())
                 .andExpect(jsonPath("$.content[0].log.content").value("data TLB error interrupt"))
                 .andExpect(jsonPath("$.content[0].log.isCaution").value(true))
                 .andExpect(jsonPath("$.page").value(0))

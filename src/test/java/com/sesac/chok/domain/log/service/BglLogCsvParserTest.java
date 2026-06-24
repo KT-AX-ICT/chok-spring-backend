@@ -50,26 +50,28 @@ class BglLogCsvParserTest {
     }
 
     @Test
-    void marksFatalLevelRowAsIsFatal() {
+    void leavesAbnormalNullForFatalRow() {
+        // 파서는 1차/2차 판정을 하지 않는다. FATAL 행이어도 is_abnormal은 적재 시 null(2차 결과 전).
         String csv = HEADER + "\n"
                 + "1573,KERNDTLB,1782407412,2026.06.25,R30-M0-N9-C:J16-U01,2026-06-25-17.10.12.715707,"
                 + "R30-M0-N9-C:J16-U01,RAS,KERNEL,FATAL,data TLB error interrupt\n";
 
         BglLog log = parser.parse(new StringReader(csv)).get(0);
 
-        assertThat(log.isFatal()).isTrue();
+        assertThat(log.getIsAbnormal()).isNull();
+        assertThat(log.getLogLevel()).isEqualTo("FATAL"); // FATAL 여부는 log_level로 재계산 가능
         assertThat(log.getLabel()).isEqualTo("KERNDTLB");
     }
 
     @Test
-    void marksNonFatalLevelRowAsNotFatal() {
+    void leavesAbnormalNullForNonFatalRow() {
         String csv = HEADER + "\n"
                 + "1,-,1782086961,2026.06.22,R02-M1-N0-C:J12-U11,2026-06-22-00.09.21.588637,"
                 + "R02-M1-N0-C:J12-U11,RAS,KERNEL,INFO,instruction cache parity error corrected\n";
 
         BglLog log = parser.parse(new StringReader(csv)).get(0);
 
-        assertThat(log.isFatal()).isFalse();
+        assertThat(log.getIsAbnormal()).isNull();
     }
 
     @Test

@@ -58,8 +58,8 @@ public class LogAnalysis {
     @Column(columnDefinition = "TEXT")
     private String action;
 
-    /** 분석 결과가 가리키는 패턴({@code pattern_view}) 번호. 미분류는 99(Python sentinel). NOT NULL. */
-    @Column(name = "cluster_id", nullable = false)
+    /** 분석 결과가 가리키는 패턴({@code pattern_view}) 번호. 정상 로그는 {@code null}(FastAPI 계약). */
+    @Column(name = "cluster_id")
     private Long clusterId;
 
     /** 분석 생성 시점. */
