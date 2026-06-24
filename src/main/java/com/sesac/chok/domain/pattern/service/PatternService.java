@@ -4,10 +4,10 @@ import com.sesac.chok.domain.analysis.repository.LogAnalysisRepository;
 import com.sesac.chok.domain.log.dto.LogSummary;
 import com.sesac.chok.domain.log.entity.BglLog;
 import com.sesac.chok.domain.pattern.dto.PatternDetail;
+import com.sesac.chok.domain.pattern.dto.PatternListResponse;
 import com.sesac.chok.domain.pattern.dto.PatternSummary;
 import com.sesac.chok.domain.pattern.entity.PatternView;
 import com.sesac.chok.domain.pattern.repository.PatternViewRepository;
-import com.sesac.chok.global.dto.PageResponse;
 import com.sesac.chok.global.error.NotFoundException;
 import java.util.List;
 import java.util.Map;
@@ -25,11 +25,18 @@ public class PatternService {
     private final PatternViewRepository patternViewRepository;
     private final LogAnalysisRepository logAnalysisRepository;
 
-    public PageResponse<PatternSummary> getPatternList(Pageable pageable) {
+    public PatternListResponse getPatternList(Pageable pageable) {
         Map<Long, Long> countMap = logAnalysisRepository.countGroupByClusterId().stream()
                 .collect(Collectors.toMap(r -> (Long) r[0], r -> (Long) r[1]));
-        return PageResponse.of(patternViewRepository.findAll(pageable)
-                .map(p -> toSummary(p, countMap.getOrDefault(p.getId(), 0L))));
+        Map<Integer, Long> rawImportance = patternViewRepository.countGroupByImportance().stream()
+                .collect(Collectors.toMap(r -> (Integer) r[0], r -> (Long) r[1]));
+        Map<String, Long> importanceSummary = Map.of(
+                "높음", rawImportance.getOrDefault(3, 0L),
+                "보통", rawImportance.getOrDefault(2, 0L),
+                "낮음", rawImportance.getOrDefault(1, 0L));
+        return PatternListResponse.of(
+                patternViewRepository.findAll(pageable).map(p -> toSummary(p, countMap.getOrDefault(p.getId(), 0L))),
+                importanceSummary);
     }
 
     public PatternDetail getPatternDetail(Long patternId) {

@@ -13,10 +13,23 @@ import org.springframework.data.repository.query.Param;
 
 public interface LogAnalysisRepository extends JpaRepository<LogAnalysis, Long> {
 
-    /** 원시 로그({@code log})를 함께 로딩해 목록 매핑 시 N+1을 피한다. */
-    @Override
+    /** 목록 조회. keyword가 null이면 전체 반환. summary·analysis·action OR 부분검색. */
     @EntityGraph(attributePaths = "log")
-    Page<LogAnalysis> findAll(Pageable pageable);
+    @Query(value = """
+            SELECT a FROM LogAnalysis a
+            WHERE :keyword IS NULL
+               OR a.summary  LIKE CONCAT('%', :keyword, '%')
+               OR a.analysis LIKE CONCAT('%', :keyword, '%')
+               OR a.action   LIKE CONCAT('%', :keyword, '%')
+            """,
+            countQuery = """
+            SELECT COUNT(a) FROM LogAnalysis a
+            WHERE :keyword IS NULL
+               OR a.summary  LIKE CONCAT('%', :keyword, '%')
+               OR a.analysis LIKE CONCAT('%', :keyword, '%')
+               OR a.action   LIKE CONCAT('%', :keyword, '%')
+            """)
+    Page<LogAnalysis> search(@Param("keyword") String keyword, Pageable pageable);
 
     /** 위험도 분포 집계 projection. */
     interface RiskLevelCount {

@@ -106,6 +106,19 @@ class PatternIntegrationTest {
     }
 
     @Test
+    void 패턴_목록_importanceSummary_포함() throws Exception {
+        patternViewRepository.save(PatternView.builder().id(10L).patternName("A").importance(3).build());
+        patternViewRepository.save(PatternView.builder().id(11L).patternName("B").importance(3).build());
+        patternViewRepository.save(PatternView.builder().id(12L).patternName("C").importance(2).build());
+
+        mockMvc.perform(get(LIST_URL))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.importanceSummary.높음").value(2))
+                .andExpect(jsonPath("$.importanceSummary.보통").value(1))
+                .andExpect(jsonPath("$.importanceSummary.낮음").value(0));
+    }
+
+    @Test
     void 존재하지않는_패턴_404() throws Exception {
         mockMvc.perform(get(DETAIL_URL + "99999"))
                 .andExpect(status().isNotFound());
