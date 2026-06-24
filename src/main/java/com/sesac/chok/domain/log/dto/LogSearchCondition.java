@@ -14,8 +14,8 @@ public record LogSearchCondition(
         String logType,
         String component,
         String logLevel,
-        String label,
         String keyword,
+        Boolean isAbnormal,
         Boolean isCaution,
         Boolean isAnalysis) {
 }

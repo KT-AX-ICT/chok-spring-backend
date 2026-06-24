@@ -14,10 +14,13 @@ import java.time.LocalDateTime;
  * @param summary    AI 요약
  * @param analysis   분석 본문
  * @param action     대응 방안(원본 포맷 보존, 조회 시 파싱)
- * @param clusterId  패턴({@code pattern_view}) 번호. 미분류는 99(Python이 채워 보냄) — 항상 존재(NOT NULL)
+ * @param clusterId  패턴({@code pattern_view}) 번호. 정상 로그는 {@code null}(FastAPI 계약)
  * @param analyzedAt 분석 생성 시각. batch 응답 누락 시 {@code null} → 서비스가 적재 시각으로 fallback
  * @param isAbnormal 2차 이상 판정. {@code true}=이상/{@code false}=정상. 대상 로그({@code bgl_log})의
  *                   {@code is_abnormal}을 갱신한다. 누락 가능성 대비 {@code Boolean}(nullable)
+ * @param eventId    2차(Tool ①) 이벤트 템플릿 분류 결과(예: E55). 대상 로그({@code bgl_log})의
+ *                   {@code event_id}를 갱신한다. <b>정상 로그는 매칭이 없어 {@code null}</b>(FastAPI 계약).
+ *                   정본({@code bgl_template})에 없는 값이면 서비스가 event_id를 비운 채 경고만 남긴다(관대 처리)
  */
 public record AnalysisResultCommand(
         Long logId,
@@ -26,7 +29,8 @@ public record AnalysisResultCommand(
         String summary,
         String analysis,
         String action,
-        long clusterId,
+        Long clusterId,
         LocalDateTime analyzedAt,
-        Boolean isAbnormal) {
+        Boolean isAbnormal,
+        String eventId) {
 }

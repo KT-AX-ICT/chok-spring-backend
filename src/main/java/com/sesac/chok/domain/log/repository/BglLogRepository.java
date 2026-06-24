@@ -16,11 +16,13 @@ public interface BglLogRepository extends JpaRepository<BglLog, Long> {
      * 로그 목록 조회(§3.2). {@code bgl_log}를 주체로 {@code log_analysis}를 LEFT JOIN해
      * 위험도({@code riskLevel})·분석 여부({@code isAnalysis})를 함께 내려준다.
      * <p>각 필터는 null이면 조건에서 제외되는 {@code (:param IS NULL OR ...)} 패턴이다.
-     * {@code keyword}는 {@code content} 부분일치, {@code isCaution}은 {@code label != '-'} 기준이다.
+     * {@code keyword}는 {@code content} 부분일치다. {@code isCaution}(주의)은 시스템 판정 기준 —
+     * 2차 이상({@code isAbnormal=TRUE}) 또는 2차 전 FATAL({@code isAbnormal IS NULL AND logLevel='FATAL'}).
+     * {@code label}(답지)은 평가지표 전용이라 응답·필터 어디에도 노출하지 않는다(컬럼으로만 보존).
      */
     @Query(value = """
             SELECT new com.sesac.chok.domain.log.dto.LogSummary(
-                b.id, b.occurredAt, b.node, b.component, b.logType, b.logLevel, b.label, b.content, a.riskLevel)
+                b.id, b.occurredAt, b.node, b.component, b.logType, b.logLevel, b.isAbnormal, b.content, a.riskLevel)
             FROM BglLog b LEFT JOIN LogAnalysis a ON a.log = b
             WHERE (:startAt IS NULL OR b.occurredAt >= :startAt)
               AND (:endAt IS NULL OR b.occurredAt <= :endAt)
@@ -28,11 +30,11 @@ public interface BglLogRepository extends JpaRepository<BglLog, Long> {
               AND (:logType IS NULL OR b.logType = :logType)
               AND (:component IS NULL OR b.component = :component)
               AND (:logLevel IS NULL OR b.logLevel = :logLevel)
-              AND (:label IS NULL OR b.label = :label)
               AND (:keyword IS NULL OR b.content LIKE CONCAT('%', :keyword, '%'))
+              AND (:isAbnormal IS NULL OR b.isAbnormal = :isAbnormal)
               AND (:isCaution IS NULL
-                   OR (:isCaution = TRUE AND b.label <> '-')
-                   OR (:isCaution = FALSE AND (b.label = '-' OR b.label IS NULL)))
+                   OR (:isCaution = TRUE AND (b.isAbnormal = TRUE OR (b.isAbnormal IS NULL AND b.logLevel = 'FATAL')))
+                   OR (:isCaution = FALSE AND (b.isAbnormal = FALSE OR (b.isAbnormal IS NULL AND b.logLevel <> 'FATAL'))))
               AND (:isAnalysis IS NULL
                    OR (:isAnalysis = TRUE AND a.id IS NOT NULL)
                    OR (:isAnalysis = FALSE AND a.id IS NULL))
@@ -45,11 +47,11 @@ public interface BglLogRepository extends JpaRepository<BglLog, Long> {
               AND (:logType IS NULL OR b.logType = :logType)
               AND (:component IS NULL OR b.component = :component)
               AND (:logLevel IS NULL OR b.logLevel = :logLevel)
-              AND (:label IS NULL OR b.label = :label)
               AND (:keyword IS NULL OR b.content LIKE CONCAT('%', :keyword, '%'))
+              AND (:isAbnormal IS NULL OR b.isAbnormal = :isAbnormal)
               AND (:isCaution IS NULL
-                   OR (:isCaution = TRUE AND b.label <> '-')
-                   OR (:isCaution = FALSE AND (b.label = '-' OR b.label IS NULL)))
+                   OR (:isCaution = TRUE AND (b.isAbnormal = TRUE OR (b.isAbnormal IS NULL AND b.logLevel = 'FATAL')))
+                   OR (:isCaution = FALSE AND (b.isAbnormal = FALSE OR (b.isAbnormal IS NULL AND b.logLevel <> 'FATAL'))))
               AND (:isAnalysis IS NULL
                    OR (:isAnalysis = TRUE AND a.id IS NOT NULL)
                    OR (:isAnalysis = FALSE AND a.id IS NULL))
@@ -61,8 +63,8 @@ public interface BglLogRepository extends JpaRepository<BglLog, Long> {
             @Param("logType") String logType,
             @Param("component") String component,
             @Param("logLevel") String logLevel,
-            @Param("label") String label,
             @Param("keyword") String keyword,
+            @Param("isAbnormal") Boolean isAbnormal,
             @Param("isCaution") Boolean isCaution,
             @Param("isAnalysis") Boolean isAnalysis,
             Pageable pageable);

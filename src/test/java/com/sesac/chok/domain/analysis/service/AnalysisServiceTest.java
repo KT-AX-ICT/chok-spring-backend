@@ -77,14 +77,14 @@ class AnalysisServiceTest {
         assertThat(logInfo.component()).isEqualTo("KERNEL");
         assertThat(logInfo.logType()).isEqualTo("RAS");
         assertThat(logInfo.logLevel()).isEqualTo("FATAL");
-        assertThat(logInfo.label()).isEqualTo("KERNDTLB");
         assertThat(logInfo.content()).isEqualTo("data TLB error interrupt");
-        assertThat(logInfo.isCaution()).isTrue();
+        assertThat(logInfo.isCaution()).isTrue(); // FATAL 미분석(2차 전) → 1차 안전망으로 주의
     }
 
     @Test
-    void marksLogAsNotCautionWhenLabelIsDash() {
-        BglLog log = BglLog.builder().id(2002L).label("-")
+    void marksLogAsNotCautionWhenSecondPassNormal() {
+        // FATAL이어도 2차가 정상(isAbnormal=false)으로 판정하면 비주의(2차 우선).
+        BglLog log = BglLog.builder().id(2002L).logLevel("FATAL").isAbnormal(false)
                 .occurredAt(LocalDateTime.of(2026, 6, 18, 9, 0, 0)).build();
         LogAnalysis entity = LogAnalysis.builder()
                 .id(502L).log(log).domain(Domain.BGL).riskLevel("낮음")
