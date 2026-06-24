@@ -2,6 +2,7 @@ package com.sesac.chok.domain.dashboard.service;
 
 import com.sesac.chok.domain.analysis.repository.LogAnalysisRepository;
 import com.sesac.chok.domain.dashboard.dto.DashboardResponse;
+import com.sesac.chok.domain.log.dto.LogAggregateView;
 import com.sesac.chok.domain.log.entity.BglLog;
 import com.sesac.chok.domain.log.repository.BglLogRepository;
 import java.time.Duration;
@@ -60,9 +61,8 @@ public class DashboardService {
         LocalDateTime calculatedStartAt = startAt != null ? startAt : calculatedEndAt.minusHours(24);
         String calculatedInterval = interval != null && !interval.isBlank() ? interval : "1h";
 
-        List<BglLog> rows = bglLogRepository
-                .findByOccurredAtGreaterThanEqualAndOccurredAtLessThanOrderByOccurredAtAsc(
-                        calculatedStartAt, calculatedEndAt);
+        List<LogAggregateView> rows = bglLogRepository.findAggregateViewInRange(
+                calculatedStartAt, calculatedEndAt);
         List<LogAnalysisRepository.RiskLevelCount> riskCounts =
                 logAnalysisRepository.countByRiskLevelInRange(calculatedStartAt, calculatedEndAt);
         // 분석 완료 수: 범위 내 log_analysis row 합계 (로그당 분석 1건 가정).
@@ -94,9 +94,9 @@ public class DashboardService {
         return label != null && !NORMAL_LABEL.equals(label);
     }
 
-    private DashboardResponse.Stats aggregateStats(List<BglLog> rows, int analyzedCount) {
+    private DashboardResponse.Stats aggregateStats(List<LogAggregateView> rows, int analyzedCount) {
         int total = rows.size();
-        int caution = (int) rows.stream().filter(r -> isCaution(r.getLabel())).count();
+        int caution = (int) rows.stream().filter(r -> isCaution(r.label())).count();
         return new DashboardResponse.Stats(total, caution, analyzedCount);
     }
 
@@ -130,7 +130,7 @@ public class DashboardService {
      * 빈 버킷도 0으로 노출해야 line/area 차트가 빈 구간에서 바닥(0)으로 내려간다(보간 방지).
      */
     private List<DashboardResponse.TimeSeriesItem> aggregateTimeSeries(
-            List<BglLog> rows, LocalDateTime startAt, LocalDateTime endAt, String interval) {
+            List<LogAggregateView> rows, LocalDateTime startAt, LocalDateTime endAt, String interval) {
         // 막대 하나의 시간 폭(초). interval(예: 1h)을 초로 바꾼 값.
         long bucketSeconds = Math.max(parseInterval(interval).getSeconds(), 1);
         // 조회 구간 전체 길이(초). 이 길이를 막대 폭으로 나눈 만큼 막대가 생긴다.
@@ -161,8 +161,8 @@ public class DashboardService {
         int[] total = new int[n];
         int[] caution = new int[n];
 
-        for (BglLog r : rows) {
-            LocalDateTime occurredAt = r.getOccurredAt();
+        for (LogAggregateView r : rows) {
+            LocalDateTime occurredAt = r.occurredAt();
             if (occurredAt == null || occurredAt.isBefore(startAt) || !occurredAt.isBefore(endAt)) {
                 continue;
             }
@@ -175,7 +175,7 @@ public class DashboardService {
                 idx = n - 1; // 경계/반올림 오차로 마지막을 살짝 넘는 경우, 마지막 막대에 넣어 누락을 막는다.
             }
             total[idx]++;
-            if (isCaution(r.getLabel())) {
+            if (isCaution(r.label())) {
                 caution[idx]++;
             }
         }
@@ -187,15 +187,15 @@ public class DashboardService {
         return items;
     }
 
-    private List<DashboardResponse.TypeDistributionItem> aggregateTypeDistribution(List<BglLog> rows) {
-        return countByDesc(rows, BglLog::getLogType).entrySet().stream()
+    private List<DashboardResponse.TypeDistributionItem> aggregateTypeDistribution(List<LogAggregateView> rows) {
+        return countByDesc(rows, LogAggregateView::logType).entrySet().stream()
                 .map(e -> new DashboardResponse.TypeDistributionItem(e.getKey(), e.getValue()))
                 .toList();
     }
 
     /** 컴포넌트 분포를 고정 리스트 순서(없는 컴포넌트 0)로 구성한다. riskDistribution과 같은 0-fill 방식. */
-    private List<DashboardResponse.ComponentDistributionItem> aggregateComponentDistribution(List<BglLog> rows) {
-        Map<String, Integer> counts = countByDesc(rows, BglLog::getComponent);
+    private List<DashboardResponse.ComponentDistributionItem> aggregateComponentDistribution(List<LogAggregateView> rows) {
+        Map<String, Integer> counts = countByDesc(rows, LogAggregateView::component);
         LinkedHashMap<String, Integer> ordered = new LinkedHashMap<>();
         COMPONENTS.forEach(component -> ordered.put(component, counts.getOrDefault(component, 0)));
         counts.forEach(ordered::putIfAbsent); // 고정 리스트에 없는 컴포넌트도 누락 없이 노출
@@ -204,37 +204,46 @@ public class DashboardService {
                 .toList();
     }
 
-    private List<DashboardResponse.LevelDistributionItem> aggregateLevelDistribution(List<BglLog> rows) {
-        return countByDesc(rows, BglLog::getLogLevel).entrySet().stream()
+    private List<DashboardResponse.LevelDistributionItem> aggregateLevelDistribution(List<LogAggregateView> rows) {
+        return countByDesc(rows, LogAggregateView::logLevel).entrySet().stream()
                 .map(e -> new DashboardResponse.LevelDistributionItem(e.getKey(), e.getValue()))
                 .toList();
     }
 
-    private List<DashboardResponse.RecentCautionLog> aggregateRecentCautionLogs(List<BglLog> rows) {
-        List<BglLog> recent = rows.stream()
-                .filter(r -> isCaution(r.getLabel()) && r.getOccurredAt() != null)
-                .sorted(Comparator.comparing(BglLog::getOccurredAt).reversed())
+    private List<DashboardResponse.RecentCautionLog> aggregateRecentCautionLogs(List<LogAggregateView> rows) {
+        List<LogAggregateView> recent = rows.stream()
+                .filter(r -> isCaution(r.label()) && r.occurredAt() != null)
+                .sorted(Comparator.comparing(LogAggregateView::occurredAt).reversed())
                 .limit(RECENT_CAUTION_LIMIT)
                 .toList();
 
         // isAnalysis: 해당 로그에 log_analysis row가 있는지 일괄 조회
-        List<Long> logIds = recent.stream().map(BglLog::getId).filter(Objects::nonNull).toList();
+        List<Long> logIds = recent.stream().map(LogAggregateView::id).filter(Objects::nonNull).toList();
         Set<Long> analyzedIds = logIds.isEmpty()
                 ? Set.of()
                 : new HashSet<>(logAnalysisRepository.findAnalyzedLogIds(logIds));
 
+        // content(TEXT)는 집계 view에서 제외했으므로, 노출 대상 상위 N건만 별도 조회해 채운다.
+        Map<Long, String> contentById = new HashMap<>();
+        if (!logIds.isEmpty()) {
+            for (BglLog log : bglLogRepository.findAllById(logIds)) {
+                contentById.put(log.getId(), log.getContent());
+            }
+        }
+
         return recent.stream()
                 .map(r -> new DashboardResponse.RecentCautionLog(
-                        r.getId(), format(r.getOccurredAt()), r.getNode(), r.getComponent(),
-                        r.getLogLevel(), true,
-                        analyzedIds.contains(r.getId()), r.getContent()))
+                        r.id(), format(r.occurredAt()), r.node(), r.component(),
+                        r.logLevel(), true,
+                        analyzedIds.contains(r.id()), contentById.get(r.id())))
                 .toList();
     }
 
     /** key별 count를 내림차순으로 정렬해 반환. 동등 SQL: {@code GROUP BY key ORDER BY COUNT(*) DESC}. */
-    private static LinkedHashMap<String, Integer> countByDesc(List<BglLog> rows, Function<BglLog, String> key) {
+    private static LinkedHashMap<String, Integer> countByDesc(
+            List<LogAggregateView> rows, Function<LogAggregateView, String> key) {
         Map<String, Integer> counts = new HashMap<>();
-        for (BglLog r : rows) {
+        for (LogAggregateView r : rows) {
             String k = key.apply(r);
             if (k != null) {
                 counts.merge(k, 1, Integer::sum);

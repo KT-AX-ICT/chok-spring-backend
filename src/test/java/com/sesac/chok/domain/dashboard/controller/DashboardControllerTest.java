@@ -12,7 +12,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sesac.chok.domain.analysis.repository.LogAnalysisRepository;
 import com.sesac.chok.domain.dashboard.service.DashboardService;
-import com.sesac.chok.domain.log.entity.BglLog;
+import com.sesac.chok.domain.log.dto.LogAggregateView;
 import com.sesac.chok.domain.log.repository.BglLogRepository;
 import com.sesac.chok.global.config.CorsConfig;
 import com.sesac.chok.global.config.SecurityConfig;
@@ -98,13 +98,13 @@ class DashboardControllerTest {
     @Test
     void getDashboardSummaryAggregatesBglLogRowsByBucketAndLabel() throws Exception {
         // 09:00~21:00 / 6h → 버킷 2개: [09,15), [15,21)
-        given(bglLogRepository.findByOccurredAtGreaterThanEqualAndOccurredAtLessThanOrderByOccurredAtAsc(any(), any()))
+        given(bglLogRepository.findAggregateViewInRange(any(), any()))
                 .willReturn(List.of(
-                        row(1L, "2026-06-19T10:00:00", "-", "INFO", false),
-                        row(2L, "2026-06-19T11:00:00", "KERNDTLB", "FATAL", true),
-                        row(3L, "2026-06-19T16:00:00", "-", "INFO", false),
-                        row(4L, "2026-06-19T17:00:00", "APPREAD", "FATAL", true),
-                        row(5L, "2026-06-19T18:00:00", "-", "WARNING", false)
+                        row(1L, "2026-06-19T10:00:00", "-", "INFO"),
+                        row(2L, "2026-06-19T11:00:00", "KERNDTLB", "FATAL"),
+                        row(3L, "2026-06-19T16:00:00", "-", "INFO"),
+                        row(4L, "2026-06-19T17:00:00", "APPREAD", "FATAL"),
+                        row(5L, "2026-06-19T18:00:00", "-", "WARNING")
                 ));
         // 분석 결과: 긴급 1 + 높음 1 = 분석 완료 2건, logId 4만 분석됨
         given(logAnalysisRepository.countByRiskLevelInRange(any(), any()))
@@ -163,11 +163,11 @@ class DashboardControllerTest {
     void timeSeriesDoesNotDropRowsWhenIntervalTooFine() throws Exception {
         // 24h 범위 + 1m 간격이면 1440개 막대가 필요하지만 상한(200)으로 보정된다.
         // 끝부분(23:30) 로그까지 막대에 전부 들어가야 한다(무음 절단 없음).
-        given(bglLogRepository.findByOccurredAtGreaterThanEqualAndOccurredAtLessThanOrderByOccurredAtAsc(any(), any()))
+        given(bglLogRepository.findAggregateViewInRange(any(), any()))
                 .willReturn(List.of(
-                        row(1L, "2026-06-19T00:30:00", "-", "INFO", false),
-                        row(2L, "2026-06-19T12:00:00", "-", "INFO", false),
-                        row(3L, "2026-06-19T23:30:00", "KERNDTLB", "FATAL", true)));
+                        row(1L, "2026-06-19T00:30:00", "-", "INFO"),
+                        row(2L, "2026-06-19T12:00:00", "-", "INFO"),
+                        row(3L, "2026-06-19T23:30:00", "KERNDTLB", "FATAL")));
 
         MvcResult result = mockMvc.perform(get(DASHBOARD_SUMMARY_URL)
                         .param("startAt", "2026-06-19T00:00:00")
@@ -225,17 +225,8 @@ class DashboardControllerTest {
         };
     }
 
-    private static BglLog row(long id, String occurredAt, String label, String logLevel, boolean fatal) {
-        return BglLog.builder()
-                .id(id)
-                .occurredAt(LocalDateTime.parse(occurredAt))
-                .label(label)
-                .node("R01-M0-N0")
-                .component("KERNEL")
-                .logType("RAS")
-                .logLevel(logLevel)
-                .content("test log")
-                .isAbnormal(fatal)
-                .build();
+    private static LogAggregateView row(long id, String occurredAt, String label, String logLevel) {
+        return new LogAggregateView(id, LocalDateTime.parse(occurredAt), label,
+                "R01-M0-N0", "KERNEL", "RAS", logLevel);
     }
 }
