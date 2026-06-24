@@ -54,10 +54,10 @@ class AnalysisServiceTest {
                 .createdAt(LocalDateTime.of(2026, 6, 18, 8, 31, 5))
                 .build();
         Pageable pageable = PageRequest.of(0, 50);
-        given(logAnalysisRepository.findAll(pageable))
+        given(logAnalysisRepository.search(null, pageable))
                 .willReturn(new PageImpl<>(List.of(entity), pageable, 1));
 
-        PageResponse<AnalysisDto> result = analysisService.getAnalysisList(pageable);
+        PageResponse<AnalysisDto> result = analysisService.getAnalysisList(null, pageable);
 
         assertThat(result.totalElements()).isEqualTo(1);
         assertThat(result.content()).hasSize(1);
@@ -93,10 +93,10 @@ class AnalysisServiceTest {
                 .createdAt(LocalDateTime.of(2026, 6, 18, 9, 1, 0))
                 .build();
         Pageable pageable = PageRequest.of(0, 50);
-        given(logAnalysisRepository.findAll(pageable))
+        given(logAnalysisRepository.search(null, pageable))
                 .willReturn(new PageImpl<>(List.of(entity), pageable, 1));
 
-        AnalysisDto dto = analysisService.getAnalysisList(pageable).content().get(0);
+        AnalysisDto dto = analysisService.getAnalysisList(null, pageable).content().get(0);
 
         assertThat(dto.log().isCaution()).isFalse();
         assertThat(dto.responsePlan()).containsExactly("점검 불필요");

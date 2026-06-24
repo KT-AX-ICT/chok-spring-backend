@@ -49,3 +49,6 @@ out/
 
 ### Docs ###
 docs/
+
+### H2 file DB ###
+data/

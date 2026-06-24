@@ -30,6 +30,7 @@ public interface BglLogRepository extends JpaRepository<BglLog, Long> {
               AND (:component IS NULL OR b.component = :component)
               AND (:logLevel IS NULL OR b.logLevel = :logLevel)
               AND (:keyword IS NULL OR b.content LIKE CONCAT('%', :keyword, '%'))
+              AND (:isAbnormal IS NULL OR b.isAbnormal = :isAbnormal)
               AND (:isCaution IS NULL
                    OR (:isCaution = TRUE AND (b.isAbnormal = TRUE OR (b.isAbnormal IS NULL AND b.logLevel = 'FATAL')))
                    OR (:isCaution = FALSE AND (b.isAbnormal = FALSE OR (b.isAbnormal IS NULL AND b.logLevel <> 'FATAL'))))
@@ -46,6 +47,7 @@ public interface BglLogRepository extends JpaRepository<BglLog, Long> {
               AND (:component IS NULL OR b.component = :component)
               AND (:logLevel IS NULL OR b.logLevel = :logLevel)
               AND (:keyword IS NULL OR b.content LIKE CONCAT('%', :keyword, '%'))
+              AND (:isAbnormal IS NULL OR b.isAbnormal = :isAbnormal)
               AND (:isCaution IS NULL
                    OR (:isCaution = TRUE AND (b.isAbnormal = TRUE OR (b.isAbnormal IS NULL AND b.logLevel = 'FATAL')))
                    OR (:isCaution = FALSE AND (b.isAbnormal = FALSE OR (b.isAbnormal IS NULL AND b.logLevel <> 'FATAL'))))
@@ -61,6 +63,7 @@ public interface BglLogRepository extends JpaRepository<BglLog, Long> {
             @Param("component") String component,
             @Param("logLevel") String logLevel,
             @Param("keyword") String keyword,
+            @Param("isAbnormal") Boolean isAbnormal,
             @Param("isCaution") Boolean isCaution,
             @Param("isAnalysis") Boolean isAnalysis,
             Pageable pageable);
