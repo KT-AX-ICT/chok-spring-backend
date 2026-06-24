@@ -3,6 +3,7 @@ package com.sesac.chok.domain.log.repository;
 import com.sesac.chok.domain.log.dto.LogSummary;
 import com.sesac.chok.domain.log.entity.BglLog;
 import java.time.LocalDateTime;
+import java.util.List;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -10,6 +11,18 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface BglLogRepository extends JpaRepository<BglLog, Long> {
+
+    /**
+     * 분석 잡 대상: 아직 분석되지 않은 FATAL 로그. ({@code log_level='FATAL'} AND {@code log_analysis} 없음)
+     * <p>시간 조건 없음(시연 데이터 전량 대상). 발생 시각 오름차순(오래된 것 우선)으로 {@code Pageable} limit만큼 반환한다.
+     */
+    @Query("""
+            SELECT b FROM BglLog b
+            WHERE b.logLevel = 'FATAL'
+              AND NOT EXISTS (SELECT 1 FROM LogAnalysis a WHERE a.log = b)
+            ORDER BY b.occurredAt ASC
+            """)
+    List<BglLog> findUnanalyzedFatal(Pageable pageable);
 
     /**
      * 로그 목록 조회(§3.2). {@code bgl_log}를 주체로 {@code log_analysis}를 LEFT JOIN해
