@@ -33,8 +33,8 @@ public interface BglLogRepository extends JpaRepository<BglLog, Long> {
      * {@code label}(답지)은 평가지표 전용이라 응답·필터 어디에도 노출하지 않는다(컬럼으로만 보존).
      */
     @Query(value = """
-            SELECT new com.sesac.chok.domain.log.dto.LogSummary(
-                b.id, b.occurredAt, b.node, b.component, b.logType, b.logLevel, b.isAbnormal, b.content, a.riskLevel)
+            SELECT DISTINCT new com.sesac.chok.domain.log.dto.LogSummary(
+                b.id, b.occurredAt, b.node, b.component, b.logType, b.logLevel, b.isAbnormal, b.content, a.riskLevel, a.id)
             FROM BglLog b LEFT JOIN LogAnalysis a ON a.log = b
             WHERE (:startAt IS NULL OR b.occurredAt >= :startAt)
               AND (:endAt IS NULL OR b.occurredAt <= :endAt)
@@ -52,7 +52,7 @@ public interface BglLogRepository extends JpaRepository<BglLog, Long> {
                    OR (:isAnalysis = FALSE AND a.id IS NULL))
             """,
             countQuery = """
-            SELECT COUNT(b) FROM BglLog b LEFT JOIN LogAnalysis a ON a.log = b
+            SELECT COUNT(DISTINCT b) FROM BglLog b LEFT JOIN LogAnalysis a ON a.log = b
             WHERE (:startAt IS NULL OR b.occurredAt >= :startAt)
               AND (:endAt IS NULL OR b.occurredAt <= :endAt)
               AND (:riskLevel IS NULL OR a.riskLevel = :riskLevel)

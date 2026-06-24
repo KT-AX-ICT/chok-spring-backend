@@ -28,9 +28,9 @@ public record LogSummary(
      */
     public LogSummary(
             Long logId, LocalDateTime occurredAt, String node, String component,
-            String logType, String logLevel, Boolean isAbnormal, String content, String riskLevel) {
+            String logType, String logLevel, Boolean isAbnormal, String content, String riskLevel, Long analysisId) {
         this(logId, occurredAt, node, component, logType, logLevel,
                 BglLog.caution(isAbnormal, logLevel),
-                riskLevel != null, content, riskLevel);
+                analysisId != null, content, riskLevel);
     }
 }
