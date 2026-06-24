@@ -1,9 +1,8 @@
 package com.sesac.chok.domain.pattern.controller;
 
 import com.sesac.chok.domain.pattern.dto.PatternDetail;
-import com.sesac.chok.domain.pattern.dto.PatternSummary;
+import com.sesac.chok.domain.pattern.dto.PatternListResponse;
 import com.sesac.chok.domain.pattern.service.PatternService;
-import com.sesac.chok.global.dto.PageResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -23,7 +22,7 @@ public class PatternController {
     private final PatternService patternService;
 
     @GetMapping("/log-patterns")
-    public PageResponse<PatternSummary> getPatternList(
+    public PatternListResponse getPatternList(
             @PageableDefault(size = 20, sort = "importance", direction = Sort.Direction.DESC)
                     Pageable pageable) {
         return patternService.getPatternList(pageable);

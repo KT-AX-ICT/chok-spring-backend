@@ -26,8 +26,8 @@ public class AnalysisService {
     private final BglLogRepository bglLogRepository;
     private final BglTemplateRepository bglTemplateRepository;
 
-    public PageResponse<AnalysisDto> getAnalysisList(Pageable pageable) {
-        return PageResponse.of(logAnalysisRepository.findAll(pageable).map(this::toDto));
+    public PageResponse<AnalysisDto> getAnalysisList(String keyword, Pageable pageable) {
+        return PageResponse.of(logAnalysisRepository.search(keyword, pageable).map(this::toDto));
     }
 
     /**
