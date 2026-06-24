@@ -1,6 +1,7 @@
 package com.sesac.chok.domain.analysis.controller;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -39,7 +40,7 @@ class AnalysisControllerTest {
                 501L, Domain.BGL, "높음",
                 "커널 데이터 TLB 오류 반복", "동일 노드 다수 발생",
                 List.of("노드 격리/점검", "메모리 컨트롤러 진단"), logInfo);
-        given(analysisService.getAnalysisList(any(Pageable.class)))
+        given(analysisService.getAnalysisList(isNull(), any(Pageable.class)))
                 .willReturn(new PageResponse<>(List.of(dto), 0, 50, 1, 1, true, true));
 
         mockMvc.perform(get("/api/v1/analysis"))

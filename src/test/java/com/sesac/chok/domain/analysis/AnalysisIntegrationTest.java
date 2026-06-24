@@ -137,6 +137,33 @@ class AnalysisIntegrationTest {
     }
 
     @Test
+    void filtersAnalysisByKeywordAcrossSummaryAnalysisAction() throws Exception {
+        repository.save(base(savedLog("node-S", null)).summary("TLB오류 발생").build());
+        repository.save(base(savedLog("node-A", null)).analysis("메모리 누수 감지").build());
+        repository.save(base(savedLog("node-P", null)).action("[\"재시작 필요\"]").build());
+        repository.save(base(savedLog("node-X", null)).summary("정상 동작").build());
+
+        mockMvc.perform(get("/api/v1/analysis").param("keyword", "TLB"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].log.node").value("node-S"));
+
+        mockMvc.perform(get("/api/v1/analysis").param("keyword", "누수"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].log.node").value("node-A"));
+
+        mockMvc.perform(get("/api/v1/analysis").param("keyword", "재시작"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].log.node").value("node-P"));
+
+        mockMvc.perform(get("/api/v1/analysis"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(4));
+    }
+
+    @Test
     void respectsPageAndSizeParams() throws Exception {
         repository.save(base(savedLog("node-1", null)).build());
         repository.save(base(savedLog("node-2", null)).build());
