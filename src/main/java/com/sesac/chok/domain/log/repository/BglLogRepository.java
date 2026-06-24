@@ -83,14 +83,15 @@ public interface BglLogRepository extends JpaRepository<BglLog, Long> {
             Pageable pageable);
 
     /**
-     * {@code [startAt, endAt)} 범위의 로그를 시각 오름차순으로 집계용 경량 view로 조회한다.
-     * content(TEXT) 등 무거운 컬럼을 제외해 전 범위 스캔 비용을 줄인다. 대시보드 집계의 단일 입력 소스다.
+     * {@code [startAt, endAt)} 범위의 로그를 집계용 경량 view로 조회한다. content(TEXT) 등 무거운 컬럼을
+     * 제외해 전 범위 스캔 비용을 줄인다. 대시보드 집계의 단일 입력 소스다.
+     * <p>정렬은 생략한다 — 집계(시간버킷·분포·카운트)는 순서에 의존하지 않고, 최근 주의 로그는 서비스에서
+     * 다시 정렬하므로 SQL 정렬 단계가 불필요하다.
      */
     @Query("SELECT new com.sesac.chok.domain.log.dto.LogAggregateView("
             + "b.id, b.occurredAt, b.label, b.node, b.component, b.logType, b.logLevel) "
             + "FROM BglLog b "
-            + "WHERE b.occurredAt >= :startAt AND b.occurredAt < :endAt "
-            + "ORDER BY b.occurredAt ASC")
+            + "WHERE b.occurredAt >= :startAt AND b.occurredAt < :endAt")
     List<LogAggregateView> findAggregateViewInRange(
             @Param("startAt") LocalDateTime startAt, @Param("endAt") LocalDateTime endAt);
 }
