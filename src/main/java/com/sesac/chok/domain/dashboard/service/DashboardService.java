@@ -131,14 +131,27 @@ public class DashboardService {
      */
     private List<DashboardResponse.TimeSeriesItem> aggregateTimeSeries(
             List<BglLog> rows, LocalDateTime startAt, LocalDateTime endAt, String interval) {
-        Duration bucket = parseInterval(interval);
+        // 막대 하나의 시간 폭(초). interval(예: 1h)을 초로 바꾼 값.
+        long bucketSeconds = Math.max(parseInterval(interval).getSeconds(), 1);
+        // 조회 구간 전체 길이(초). 이 길이를 막대 폭으로 나눈 만큼 막대가 생긴다.
+        long rangeSeconds = Math.max(Duration.between(startAt, endAt).getSeconds(), 1);
 
-        // 빈 버킷도 0으로 노출하기 위한 스켈레톤. [startAt, endAt) 기준이라 endAt에서 시작하는 버킷은 제외.
+        // 막대 개수에는 상한(MAX_BUCKETS)이 있다. interval이 너무 잘면 막대가 이 상한을 넘는데,
+        // 그러면 상한을 넘는 뒷부분 로그가 차트에서 통째로 빠져 막대 합이 총계와 안 맞게 된다.
+        // 그래서 막대가 상한을 넘을 것 같으면, 막대 폭을 키워(=간격을 굵게) 전체 구간이 상한 안에
+        // 다 들어오도록 맞춘다. 이렇게 하면 데이터가 누락되지 않는다(요청 간격보다 굵어질 뿐).
+        long minBucketSeconds = (long) Math.ceil((double) rangeSeconds / MAX_BUCKETS);
+        if (bucketSeconds < minBucketSeconds) {
+            log.info("[Dashboard] interval이 너무 잘아 막대가 {}개를 넘어, 막대 폭을 {}초로 키워 전체 구간을 담는다. interval={}",
+                    MAX_BUCKETS, minBucketSeconds, interval);
+            bucketSeconds = minBucketSeconds;
+        }
+
+        // 각 막대의 시작 시각 목록. 빈 막대도 0으로 그려야 차트가 빈 구간에서 바닥(0)으로 내려간다(보간 방지).
+        Duration bucketStep = Duration.ofSeconds(bucketSeconds);
         List<LocalDateTime> bucketStarts = new ArrayList<>();
-        LocalDateTime at = startAt;
-        while (at.isBefore(endAt) && bucketStarts.size() < MAX_BUCKETS) {
+        for (LocalDateTime at = startAt; at.isBefore(endAt); at = at.plus(bucketStep)) {
             bucketStarts.add(at);
-            at = at.plus(bucket);
         }
         if (bucketStarts.isEmpty()) {
             bucketStarts.add(startAt);
@@ -147,16 +160,19 @@ public class DashboardService {
         int n = bucketStarts.size();
         int[] total = new int[n];
         int[] caution = new int[n];
-        long bucketSeconds = Math.max(bucket.getSeconds(), 1);
 
         for (BglLog r : rows) {
             LocalDateTime occurredAt = r.getOccurredAt();
             if (occurredAt == null || occurredAt.isBefore(startAt) || !occurredAt.isBefore(endAt)) {
                 continue;
             }
+            // 시작 시각으로부터 몇 번째 막대인지 계산. 위에서 막대 폭을 보정했으므로 idx는 항상 막대 범위 안이다.
             int idx = (int) (Duration.between(startAt, occurredAt).getSeconds() / bucketSeconds);
-            if (idx < 0 || idx >= n) {
+            if (idx < 0) {
                 continue;
+            }
+            if (idx >= n) {
+                idx = n - 1; // 경계/반올림 오차로 마지막을 살짝 넘는 경우, 마지막 막대에 넣어 누락을 막는다.
             }
             total[idx]++;
             if (isCaution(r.getLabel())) {

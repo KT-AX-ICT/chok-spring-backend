@@ -159,6 +159,33 @@ class DashboardControllerTest {
                 .andExpect(jsonPath("$.recentPatterns[0].riskLevel").doesNotExist()); // 패턴 속성 아님
     }
 
+    @Test
+    void timeSeriesDoesNotDropRowsWhenIntervalTooFine() throws Exception {
+        // 24h 범위 + 1m 간격이면 1440개 막대가 필요하지만 상한(200)으로 보정된다.
+        // 끝부분(23:30) 로그까지 막대에 전부 들어가야 한다(무음 절단 없음).
+        given(bglLogRepository.findByOccurredAtGreaterThanEqualAndOccurredAtLessThanOrderByOccurredAtAsc(any(), any()))
+                .willReturn(List.of(
+                        row(1L, "2026-06-19T00:30:00", "-", "INFO", false),
+                        row(2L, "2026-06-19T12:00:00", "-", "INFO", false),
+                        row(3L, "2026-06-19T23:30:00", "KERNDTLB", "FATAL", true)));
+
+        MvcResult result = mockMvc.perform(get(DASHBOARD_SUMMARY_URL)
+                        .param("startAt", "2026-06-19T00:00:00")
+                        .param("endAt", "2026-06-20T00:00:00")
+                        .param("interval", "1m"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.stats.totalLogCount").value(3))
+                .andReturn();
+
+        JsonNode timeSeries = objectMapper.readTree(result.getResponse().getContentAsString()).path("timeSeries");
+        int sumTotal = 0;
+        for (JsonNode bucket : timeSeries) {
+            sumTotal += bucket.path("totalCount").asInt();
+        }
+        assertThat(timeSeries.size()).isLessThanOrEqualTo(200); // 상한 이하로 보정
+        assertThat(sumTotal).isEqualTo(3); // 끝부분 로그까지 누락 없이 집계
+    }
+
     private static LogAnalysisRepository.RecentPatternCount recentPattern(
             long patternId, String patternName, int importance, long count) {
         return new LogAnalysisRepository.RecentPatternCount() {
