@@ -1,5 +1,6 @@
 package com.sesac.chok.global.error;
 
+import com.sesac.chok.integration.fastapi.FastApiException;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
@@ -72,6 +73,14 @@ public class GlobalExceptionHandler {
         // base path(/api/v1) 미적용 옛 경로 접근 시에도 혼란스러운 500 대신 명확한 404를 돌려준다.
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(ErrorResponse.of("NOT_FOUND", "no handler for " + e.getResourcePath()));
+    }
+
+    @ExceptionHandler(FastApiException.class)
+    public ResponseEntity<ErrorResponse> handleFastApi(FastApiException e) {
+        // 외부 FastAPI 장애(응답 오류·연결 실패)는 게이트웨이 상류 실패 → 502로 노출.
+        log.warn("FastAPI 연동 오류: {}", e.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
+                .body(ErrorResponse.of("FASTAPI_ERROR", e.getMessage()));
     }
 
     @ExceptionHandler(Exception.class)
