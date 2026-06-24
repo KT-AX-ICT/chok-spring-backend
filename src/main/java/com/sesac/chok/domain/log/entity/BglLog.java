@@ -76,6 +76,14 @@ public class BglLog {
     }
 
     /**
+     * 2차(FastAPI Tool ①) 이벤트 템플릿 분류 결과 {@code event_id}를 채운다(적재 후 결과 도착 시 갱신).
+     * 정본({@code bgl_template}) 존재 검증은 호출 측(서비스) 책임 — 여기선 값만 반영한다.
+     */
+    public void updateEventId(String eventId) {
+        this.eventId = eventId;
+    }
+
+    /**
      * 시스템 판정 기준 주의 여부(프론트 노출용 파생값). 정본 규칙은 여기 한 곳에 둔다.
      * <ul>
      *   <li>2차 이상({@code isAbnormal == true}) → 주의</li>
