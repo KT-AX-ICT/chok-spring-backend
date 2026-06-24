@@ -49,6 +49,6 @@ public record DashboardResponse(
     ) {
     }
 
-    public record RecentPattern(long patternId, String patternName, int count, String riskLevel, int importance) {
+    public record RecentPattern(long patternId, String patternName, int count, int importance) {
     }
 }

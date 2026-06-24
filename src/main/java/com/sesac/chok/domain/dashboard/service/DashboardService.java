@@ -30,8 +30,9 @@ import org.springframework.transaction.annotation.Transactional;
  * interval이 가변(1h/5m/1d)이고 H2·MySQL을 모두 쓰므로 DB 날짜함수 대신 Java 버킷팅을 쓴다(이식성).
  *
  * <p>BglLog로 만드는 필드(총/주의 카운트, timeSeries, type/component/level 분포)와
- * log_analysis로 만드는 필드(riskDistribution, analyzedLogCount, recentCautionLog.isAnalysis)를
- * 각각 실집계한다. recentPatterns는 pattern 도메인 연결 전까지 mock으로 둔다.
+ * log_analysis로 만드는 필드(riskDistribution, analyzedLogCount, recentCautionLog.isAnalysis,
+ * recentPatterns)를 각각 실집계한다. recentPatterns는 log_analysis를 cluster_id별로 카운트해
+ * pattern_view와 join한다.
  */
 @Slf4j
 @Service
@@ -41,9 +42,14 @@ public class DashboardService {
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
     private static final String NORMAL_LABEL = "-";
     private static final int RECENT_CAUTION_LIMIT = 5;
+    private static final int RECENT_PATTERN_LIMIT = 5;
     private static final int MAX_BUCKETS = 200;
+    // 미분류 sentinel(Python이 비군집 분석에 채우는 cluster 번호). 반복 패턴 카드에서 제외.
+    private static final long UNCLASSIFIED_CLUSTER_ID = 99L;
     // 도넛 고정 순서/구성 (PROJECT_CONTEXT riskLevel ENUM). 데이터에 없는 등급도 0으로 노출.
     private static final List<String> RISK_LEVELS = List.of("긴급", "높음", "보통", "낮음");
+    // 컴포넌트 막대 고정 순서/구성 (현재 BGL seed의 component 집합). 창에 없는 컴포넌트도 0으로 노출.
+    private static final List<String> COMPONENTS = List.of("KERNEL", "APP", "MMCS", "DISCOVERY", "HARDWARE");
 
     private final BglLogRepository bglLogRepository;
     private final LogAnalysisRepository logAnalysisRepository;
@@ -76,7 +82,7 @@ public class DashboardService {
                 aggregateComponentDistribution(rows),
                 aggregateLevelDistribution(rows),
                 aggregateRecentCautionLogs(rows),
-                mockRecentPatterns()
+                aggregateRecentPatterns(calculatedStartAt, calculatedEndAt)
         );
     }
 
@@ -171,8 +177,13 @@ public class DashboardService {
                 .toList();
     }
 
+    /** 컴포넌트 분포를 고정 리스트 순서(없는 컴포넌트 0)로 구성한다. riskDistribution과 같은 0-fill 방식. */
     private List<DashboardResponse.ComponentDistributionItem> aggregateComponentDistribution(List<BglLog> rows) {
-        return countByDesc(rows, BglLog::getComponent).entrySet().stream()
+        Map<String, Integer> counts = countByDesc(rows, BglLog::getComponent);
+        LinkedHashMap<String, Integer> ordered = new LinkedHashMap<>();
+        COMPONENTS.forEach(component -> ordered.put(component, counts.getOrDefault(component, 0)));
+        counts.forEach(ordered::putIfAbsent); // 고정 리스트에 없는 컴포넌트도 누락 없이 노출
+        return ordered.entrySet().stream()
                 .map(e -> new DashboardResponse.ComponentDistributionItem(e.getKey(), e.getValue()))
                 .toList();
     }
@@ -221,19 +232,29 @@ public class DashboardService {
     }
 
     // ---------------------------------------------------------------------
-    // 범위 echo + analysis/pattern 파생 mock (해당 도메인 연결 전까지 유지)
+    // 범위 echo + 반복 패턴 집계
     // ---------------------------------------------------------------------
 
     private DashboardResponse.Range range(LocalDateTime startAt, LocalDateTime endAt) {
         return new DashboardResponse.Range(format(startAt), format(endAt));
     }
 
-    // TODO: Remove after PatternService recent pattern query is implemented.
-    private List<DashboardResponse.RecentPattern> mockRecentPatterns() {
-        return List.of(
-                new DashboardResponse.RecentPattern(12L, "Data TLB Error", 87, "높음", 90),
-                new DashboardResponse.RecentPattern(13L, "Application Read Error", 42, "보통", 72)
-        );
+    /**
+     * 범위 내 분석 결과를 cluster_id별로 카운트해 pattern_view 메타(이름·중요도)와 합친다.
+     * patternId는 cluster 번호와 동일하므로 프론트가 그대로 패턴 상세 조회에 쓸 수 있다.
+     * 미분류(99)는 제외되며, 중요도 내림차순 상위 {@value #RECENT_PATTERN_LIMIT}건만 노출한다.
+     */
+    private List<DashboardResponse.RecentPattern> aggregateRecentPatterns(
+            LocalDateTime startAt, LocalDateTime endAt) {
+        return logAnalysisRepository
+                .findRecentPatternsInRange(startAt, endAt, UNCLASSIFIED_CLUSTER_ID).stream()
+                .limit(RECENT_PATTERN_LIMIT)
+                .map(p -> new DashboardResponse.RecentPattern(
+                        p.getPatternId(),
+                        p.getPatternName(),
+                        (int) p.getCount(),
+                        p.getImportance() != null ? p.getImportance() : 0))
+                .toList();
     }
 
     // ---------------------------------------------------------------------

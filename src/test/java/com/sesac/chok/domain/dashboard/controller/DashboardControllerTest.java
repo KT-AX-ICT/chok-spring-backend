@@ -134,7 +134,55 @@ class DashboardControllerTest {
                 .andExpect(jsonPath("$.recentCautionLogs.length()").value(2))
                 .andExpect(jsonPath("$.recentCautionLogs[0].label").value("APPREAD")) // 최신순(17:00)
                 .andExpect(jsonPath("$.recentCautionLogs[0].isAnalysis").value(true)) // logId 4 분석됨
-                .andExpect(jsonPath("$.recentCautionLogs[1].isAnalysis").value(false));
+                .andExpect(jsonPath("$.recentCautionLogs[1].isAnalysis").value(false))
+                // componentDistribution: 고정 5종 순서, 창에 없는 컴포넌트는 0
+                .andExpect(jsonPath("$.componentDistribution.length()").value(5))
+                .andExpect(jsonPath("$.componentDistribution[0].component").value("KERNEL"))
+                .andExpect(jsonPath("$.componentDistribution[0].count").value(5))
+                .andExpect(jsonPath("$.componentDistribution[1].component").value("APP"))
+                .andExpect(jsonPath("$.componentDistribution[1].count").value(0));
+    }
+
+    @Test
+    void getDashboardSummaryReturnsRecentPatternsFromAnalysisCounts() throws Exception {
+        given(logAnalysisRepository.findRecentPatternsInRange(any(), any(), org.mockito.ArgumentMatchers.anyLong()))
+                .willReturn(List.of(
+                        recentPattern(1L, "Data TLB Error", 90, 87),
+                        recentPattern(4L, "Application Read Error", 72, 42)));
+
+        mockMvc.perform(get(DASHBOARD_SUMMARY_URL))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.recentPatterns.length()").value(2))
+                .andExpect(jsonPath("$.recentPatterns[0].patternId").value(1)) // patternId == cluster 번호
+                .andExpect(jsonPath("$.recentPatterns[0].patternName").value("Data TLB Error"))
+                .andExpect(jsonPath("$.recentPatterns[0].count").value(87))
+                .andExpect(jsonPath("$.recentPatterns[0].importance").value(90))
+                .andExpect(jsonPath("$.recentPatterns[0].riskLevel").doesNotExist()); // 패턴 속성 아님
+    }
+
+    private static LogAnalysisRepository.RecentPatternCount recentPattern(
+            long patternId, String patternName, int importance, long count) {
+        return new LogAnalysisRepository.RecentPatternCount() {
+            @Override
+            public Long getPatternId() {
+                return patternId;
+            }
+
+            @Override
+            public String getPatternName() {
+                return patternName;
+            }
+
+            @Override
+            public Integer getImportance() {
+                return importance;
+            }
+
+            @Override
+            public long getCount() {
+                return count;
+            }
+        };
     }
 
     private static LogAnalysisRepository.RiskLevelCount riskCount(String riskLevel, long count) {
