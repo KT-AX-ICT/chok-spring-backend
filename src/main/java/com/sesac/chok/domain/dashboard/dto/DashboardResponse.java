@@ -17,7 +17,12 @@ public record DashboardResponse(
     public record Range(String startAt, String endAt) {
     }
 
-    public record Stats(int totalLogCount, int cautionLogCount, int analyzedLogCount) {
+    /**
+     * {@code analyzedLogCount}는 분석 완료 전체 수(정상 포함)이고, {@code normalLogCount}는 그 중 정상 판정
+     * (riskLevel 없음) 수다. 따라서 {@code analyzedLogCount = riskDistribution 합 + normalLogCount}이며,
+     * riskDistribution(긴급/높음/보통/낮음)은 이상 판정만 담는다.
+     */
+    public record Stats(int totalLogCount, int cautionLogCount, int analyzedLogCount, int normalLogCount) {
     }
 
     public record TimeSeriesItem(String time, int totalCount, int cautionCount) {

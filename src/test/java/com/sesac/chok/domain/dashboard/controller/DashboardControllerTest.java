@@ -106,9 +106,9 @@ class DashboardControllerTest {
                         row(4L, "2026-06-19T17:00:00", "APPREAD", "FATAL"),
                         row(5L, "2026-06-19T18:00:00", "-", "WARNING")
                 ));
-        // 분석 결과: 긴급 1 + 높음 1 = 분석 완료 2건, logId 4만 분석됨
+        // 분석 결과: 긴급 1 + 높음 1 + 정상(riskLevel=null) 3 = 분석 완료 5건(정상 3), logId 4만 분석됨
         given(logAnalysisRepository.countByRiskLevelInRange(any(), any()))
-                .willReturn(List.of(riskCount("긴급", 1), riskCount("높음", 1)));
+                .willReturn(List.of(riskCount("긴급", 1), riskCount("높음", 1), riskCount(null, 3)));
         given(logAnalysisRepository.findAnalyzedLogIds(any()))
                 .willReturn(List.of(4L));
 
@@ -119,7 +119,8 @@ class DashboardControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.stats.totalLogCount").value(5))
                 .andExpect(jsonPath("$.stats.cautionLogCount").value(2))
-                .andExpect(jsonPath("$.stats.analyzedLogCount").value(2))
+                .andExpect(jsonPath("$.stats.analyzedLogCount").value(5)) // 정상 3 포함
+                .andExpect(jsonPath("$.stats.normalLogCount").value(3))
                 .andExpect(jsonPath("$.timeSeries.length()").value(2))
                 .andExpect(jsonPath("$.timeSeries[0].totalCount").value(2))
                 .andExpect(jsonPath("$.timeSeries[0].cautionCount").value(1))

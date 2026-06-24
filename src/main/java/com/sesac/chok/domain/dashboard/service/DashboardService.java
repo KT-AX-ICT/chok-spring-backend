@@ -67,6 +67,12 @@ public class DashboardService {
                 logAnalysisRepository.countByRiskLevelInRange(calculatedStartAt, calculatedEndAt);
         // 분석 완료 수: 범위 내 log_analysis row 합계 (로그당 분석 1건 가정).
         int analyzedCount = riskCounts.stream().mapToInt(r -> (int) r.getCount()).sum();
+        // 정상 판정 수: 위험도가 없는(riskLevel=null) 분석 건. analyzedCount에는 포함되나 riskDistribution엔 빠지므로,
+        // 둘의 차이를 명시하기 위해 별도로 센다 (analyzedCount = riskDistribution 합 + normalCount).
+        int normalCount = riskCounts.stream()
+                .filter(r -> r.getRiskLevel() == null)
+                .mapToInt(r -> (int) r.getCount())
+                .sum();
 
         log.info(
                 "[Dashboard] aggregated from {} bgl_log rows, {} analyses, startAt={}, endAt={}, interval={}",
@@ -75,7 +81,7 @@ public class DashboardService {
 
         return new DashboardResponse(
                 range(calculatedStartAt, calculatedEndAt),
-                aggregateStats(rows, analyzedCount),
+                aggregateStats(rows, analyzedCount, normalCount),
                 aggregateTimeSeries(rows, calculatedStartAt, calculatedEndAt, calculatedInterval),
                 aggregateRiskDistribution(riskCounts),
                 aggregateTypeDistribution(rows),
@@ -94,10 +100,10 @@ public class DashboardService {
         return label != null && !NORMAL_LABEL.equals(label);
     }
 
-    private DashboardResponse.Stats aggregateStats(List<LogAggregateView> rows, int analyzedCount) {
+    private DashboardResponse.Stats aggregateStats(List<LogAggregateView> rows, int analyzedCount, int normalCount) {
         int total = rows.size();
         int caution = (int) rows.stream().filter(r -> isCaution(r.label())).count();
-        return new DashboardResponse.Stats(total, caution, analyzedCount);
+        return new DashboardResponse.Stats(total, caution, analyzedCount, normalCount);
     }
 
     /** log_analysis.risk_level GROUP BY 결과를 4단계 고정 순서(없는 등급 0)로 구성한다. */
