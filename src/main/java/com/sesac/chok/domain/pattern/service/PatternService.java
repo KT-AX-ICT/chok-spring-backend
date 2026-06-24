@@ -60,7 +60,8 @@ public class PatternService {
 
     private LogSummary toLogSummary(BglLog log, String riskLevel) {
         return new LogSummary(log.getId(), log.getOccurredAt(), log.getNode(), log.getComponent(),
-                log.getLogType(), log.getLogLevel(), log.getIsAbnormal(), log.getContent(), riskLevel);
+                log.getLogType(), log.getLogLevel(), log.getIsAbnormal(), log.getContent(), riskLevel,
+                riskLevel != null ? 1L : null);
     }
 
     private String importanceToRiskLevel(Integer importance) {
