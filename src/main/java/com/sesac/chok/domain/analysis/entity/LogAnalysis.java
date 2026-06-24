@@ -45,8 +45,8 @@ public class LogAnalysis {
     @Column(nullable = false)
     private Domain domain;
 
-    /** 위험도(긴급·높음·보통·낮음). FastAPI가 산출한 한글 값을 그대로 저장·전달한다. */
-    @Column(name = "risk_level", nullable = false)
+    /** 위험도(긴급·높음·보통·낮음). FastAPI가 산출한 한글 값을 그대로 저장·전달한다. 정상 로그는 {@code null}(FastAPI 계약). */
+    @Column(name = "risk_level")
     private String riskLevel;
 
     @Column(columnDefinition = "TEXT")
