@@ -210,7 +210,7 @@ public class DashboardService {
         return recent.stream()
                 .map(r -> new DashboardResponse.RecentCautionLog(
                         r.getId(), format(r.getOccurredAt()), r.getNode(), r.getComponent(),
-                        r.getLogLevel(), r.getLogType(), true,
+                        r.getLogLevel(), true,
                         analyzedIds.contains(r.getId()), r.getContent()))
                 .toList();
     }
