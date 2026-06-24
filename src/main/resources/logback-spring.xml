@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <!-- Spring Boot 기본 로깅(콘솔 등)을 그대로 사용 -->
+    <include resource="org/springframework/boot/logging/logback/base.xml"/>
+
+    <!-- 분석 잡 전용 파일 appender (logs/analysis.log) -->
+    <appender name="ANALYSIS_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>analysis-log/analysis.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <!-- 날짜 + 순번으로 분할, 오래된 파일은 gzip 압축 -->
+            <fileNamePattern>analysis-log/analysis.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>10MB</maxFileSize>      <!-- 파일 하나 상한 -->
+            <maxHistory>14</maxHistory>          <!-- 14일치만 보관 -->
+            <totalSizeCap>200MB</totalSizeCap>   <!-- 전체 용량 상한(마지막 방어선) -->
+        </rollingPolicy>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- 분석 흐름(스케줄러 + analysis 도메인) 로그를 analysis.log 로 라우팅.
+         additivity=true 이므로 콘솔에도 그대로 보인다(개발 중 가시성 유지). -->
+    <logger name="com.sesac.chok.scheduler" level="DEBUG" additivity="true">
+        <appender-ref ref="ANALYSIS_FILE"/>
+    </logger>
+    <logger name="com.sesac.chok.domain.analysis" level="DEBUG" additivity="true">
+        <appender-ref ref="ANALYSIS_FILE"/>
+    </logger>
+</configuration>

@@ -83,7 +83,7 @@ public class BatchAnalysisService {
                             saved++;
                         } catch (Exception e) {
                             failed++;
-                            log.warn("[Batch] 결과 저장 실패 logId={}", item.logId(), e);
+                            log.warn("[Batch] 결과 저장 실패 logId={} cause={}", item.logId(), e.toString());
                         }
                     }
                 } catch (Exception e) {
