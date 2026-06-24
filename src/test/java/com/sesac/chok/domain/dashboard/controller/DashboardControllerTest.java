@@ -132,7 +132,6 @@ class DashboardControllerTest {
                 .andExpect(jsonPath("$.riskDistribution[2].riskLevel").value("보통"))
                 .andExpect(jsonPath("$.riskDistribution[2].count").value(0))
                 .andExpect(jsonPath("$.recentCautionLogs.length()").value(2))
-                .andExpect(jsonPath("$.recentCautionLogs[0].label").value("APPREAD")) // 최신순(17:00)
                 .andExpect(jsonPath("$.recentCautionLogs[0].isAnalysis").value(true)) // logId 4 분석됨
                 .andExpect(jsonPath("$.recentCautionLogs[1].isAnalysis").value(false))
                 // componentDistribution: 고정 5종 순서, 창에 없는 컴포넌트는 0

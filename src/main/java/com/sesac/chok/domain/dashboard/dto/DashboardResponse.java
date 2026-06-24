@@ -42,7 +42,6 @@ public record DashboardResponse(
             String component,
             String logLevel,
             String logType,
-            String label,
             boolean isCaution,
             boolean isAnalysis,
             String content
