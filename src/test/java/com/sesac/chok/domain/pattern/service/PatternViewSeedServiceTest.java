@@ -2,8 +2,15 @@ package com.sesac.chok.domain.pattern.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sesac.chok.domain.pattern.dto.ClusterSeed;
 import com.sesac.chok.domain.pattern.entity.PatternView;
 import com.sesac.chok.domain.pattern.repository.PatternViewRepository;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
+import org.springframework.core.io.ClassPathResource;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -42,6 +49,25 @@ class PatternViewSeedServiceTest {
                 .hasSize(2);
         assertThat(patternViewRepository.existsById(0L)).isTrue();
         assertThat(patternViewRepository.existsById(99L)).isTrue();
+    }
+
+    @Test
+    void seedIdSetMatchesClustersJsonOrigin() throws Exception {
+        // 원천(clusters.json)의 id 집합을 직접 읽어 seed된 pattern_view의 id 집합과 정확히 일치하는지 단언한다.
+        // auto-increment 회귀(1..N → 0·99 누락)나 한쪽만 갱신되는 drift가 생기면 즉시 깨진다.
+        List<ClusterSeed> origin = new ObjectMapper().readValue(
+                new ClassPathResource("seed/clusters.json").getInputStream(),
+                new TypeReference<List<ClusterSeed>>() {});
+        Set<Long> expectedIds = origin.stream().map(ClusterSeed::id).collect(Collectors.toSet());
+
+        seedService.initializeIfEmpty();
+
+        Set<Long> actualIds = patternViewRepository.findAll().stream()
+                .map(PatternView::getId)
+                .collect(Collectors.toSet());
+        assertThat(actualIds).isEqualTo(expectedIds);
+        // 특히 위험한 경계값 — auto-increment였다면 존재하지 않을 0·99가 반드시 있어야 한다(미분류 FK 대상).
+        assertThat(actualIds).contains(0L, 99L);
     }
 
     @Test
