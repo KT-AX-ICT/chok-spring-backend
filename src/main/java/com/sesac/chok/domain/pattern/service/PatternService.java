@@ -18,6 +18,8 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,18 +35,36 @@ public class PatternService {
     /** risk_level 심각도 내림차순(가장 심각한 게 index 0). ordinal = size - index → 긴급4·높음3·보통2·낮음1. */
     private static final List<String> SEVERITY_DESC = List.of("긴급", "높음", "보통", "낮음");
 
-    public PatternListResponse getPatternList(Pageable pageable) {
+    public PatternListResponse getPatternList(String riskLevel, Pageable pageable) {
         Map<Long, Long> countMap = logAnalysisRepository.countGroupByClusterId().stream()
                 .collect(Collectors.toMap(r -> (Long) r[0], r -> (Long) r[1]));
         // 패턴 riskLevel(유저 노출값) = 그 패턴 분석들의 risk_level 최고 심각도(실데이터). importance는 정렬 내부용.
         Map<Long, String> riskLevelByCluster = logAnalysisRepository.findMaxSeverityByCluster().stream()
                 .filter(r -> r.getSeverity() >= 1)
                 .collect(Collectors.toMap(r -> r.getClusterId(), r -> riskLevelOf(r.getSeverity())));
+        // riskLevelSummary는 전체 패턴 분포(필터와 무관한 메타 정보)로 유지한다.
         Map<String, Long> riskLevelSummary = summarizeRiskLevels(riskLevelByCluster.values());
-        return PatternListResponse.of(
-                patternViewRepository.findAll(pageable)
-                        .map(p -> toSummary(p, countMap.getOrDefault(p.getId(), 0L), riskLevelByCluster.get(p.getId()))),
-                riskLevelSummary);
+
+        Page<PatternSummary> page = (riskLevel == null || riskLevel.isBlank())
+                ? patternViewRepository.findAll(pageable)
+                        .map(p -> toSummary(p, countMap.getOrDefault(p.getId(), 0L), riskLevelByCluster.get(p.getId())))
+                : filterByRiskLevel(riskLevel, countMap, riskLevelByCluster, pageable);
+        return PatternListResponse.of(page, riskLevelSummary);
+    }
+
+    /**
+     * 패턴 riskLevel(최고 심각도 파생값) 필터. 파생값이라 DB 페이징이 불가하므로 전수 계산 후
+     * in-memory로 필터·페이징한다(pattern_view는 소량 고정 카탈로그).
+     */
+    private Page<PatternSummary> filterByRiskLevel(String riskLevel, Map<Long, Long> countMap,
+            Map<Long, String> riskLevelByCluster, Pageable pageable) {
+        List<PatternSummary> filtered = patternViewRepository.findAll(pageable.getSort()).stream()
+                .map(p -> toSummary(p, countMap.getOrDefault(p.getId(), 0L), riskLevelByCluster.get(p.getId())))
+                .filter(s -> riskLevel.equals(s.riskLevel()))
+                .toList();
+        int start = (int) Math.min(pageable.getOffset(), filtered.size());
+        int end = Math.min(start + pageable.getPageSize(), filtered.size());
+        return new PageImpl<>(filtered.subList(start, end), pageable, filtered.size());
     }
 
     public PatternDetail getPatternDetail(Long patternId) {

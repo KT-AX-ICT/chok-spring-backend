@@ -144,6 +144,23 @@ class PatternIntegrationTest {
     }
 
     @Test
+    void 패턴_riskLevel_필터_해당_최고심각도_패턴만_반환() throws Exception {
+        PatternView urgent = patternViewRepository.save(
+                PatternView.builder().id(20L).patternName("긴급군").importance(3).build());
+        PatternView moderate = patternViewRepository.save(
+                PatternView.builder().id(21L).patternName("보통군").importance(2).build());
+        saveAnalysis(urgent.getId(), "긴급");
+        saveAnalysis(moderate.getId(), "보통");
+
+        mockMvc.perform(get(LIST_URL).param("riskLevel", "긴급"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].patternId").value(20))
+                .andExpect(jsonPath("$.content[0].riskLevel").value("긴급"))
+                .andExpect(jsonPath("$.totalElements").value(1));
+    }
+
+    @Test
     void 존재하지않는_패턴_404() throws Exception {
         mockMvc.perform(get(DETAIL_URL + "99999"))
                 .andExpect(status().isNotFound());
