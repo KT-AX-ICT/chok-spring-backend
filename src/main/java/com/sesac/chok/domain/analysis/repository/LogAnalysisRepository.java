@@ -13,21 +13,27 @@ import org.springframework.data.repository.query.Param;
 
 public interface LogAnalysisRepository extends JpaRepository<LogAnalysis, Long> {
 
-    /** 목록 조회. keyword가 null이면 전체 반환. summary·analysis·action OR 부분검색. */
+    /**
+     * 목록 조회("주의 로그 AI 분석"). 2차 이상 판정({@code log.isAbnormal = true})만 반환한다 —
+     * 정본은 {@code bgl_log.is_abnormal}이며 정상(false)·미분석(null) 분석은 제외한다.
+     * keyword가 null이면 이상 판정 전체 반환. summary·analysis·action OR 부분검색.
+     */
     @EntityGraph(attributePaths = "log")
     @Query(value = """
             SELECT a FROM LogAnalysis a
-            WHERE :keyword IS NULL
+            WHERE a.log.isAbnormal = TRUE
+              AND (:keyword IS NULL
                OR a.summary  LIKE CONCAT('%', :keyword, '%')
                OR a.analysis LIKE CONCAT('%', :keyword, '%')
-               OR a.action   LIKE CONCAT('%', :keyword, '%')
+               OR a.action   LIKE CONCAT('%', :keyword, '%'))
             """,
             countQuery = """
             SELECT COUNT(a) FROM LogAnalysis a
-            WHERE :keyword IS NULL
+            WHERE a.log.isAbnormal = TRUE
+              AND (:keyword IS NULL
                OR a.summary  LIKE CONCAT('%', :keyword, '%')
                OR a.analysis LIKE CONCAT('%', :keyword, '%')
-               OR a.action   LIKE CONCAT('%', :keyword, '%')
+               OR a.action   LIKE CONCAT('%', :keyword, '%'))
             """)
     Page<LogAnalysis> search(@Param("keyword") String keyword, Pageable pageable);
 
