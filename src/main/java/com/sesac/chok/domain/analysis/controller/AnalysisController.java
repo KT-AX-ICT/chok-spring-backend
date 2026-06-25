@@ -1,6 +1,7 @@
 package com.sesac.chok.domain.analysis.controller;
 
 import com.sesac.chok.domain.analysis.dto.AnalysisDto;
+import com.sesac.chok.domain.analysis.dto.AnalysisSearchCondition;
 import com.sesac.chok.domain.analysis.service.AnalysisService;
 import com.sesac.chok.global.dto.PageResponse;
 import lombok.RequiredArgsConstructor;
@@ -8,7 +9,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -19,8 +20,8 @@ public class AnalysisController {
 
     @GetMapping("/analysis")
     public PageResponse<AnalysisDto> getAnalysisList(
-            @RequestParam(required = false) String keyword,
+            @ModelAttribute AnalysisSearchCondition condition,
             @PageableDefault(size = 50, sort = "analyzedAt", direction = Sort.Direction.DESC) Pageable pageable) {
-        return analysisService.getAnalysisList(keyword, pageable);
+        return analysisService.getAnalysisList(condition, pageable);
     }
 }
