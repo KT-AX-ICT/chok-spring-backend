@@ -6,6 +6,8 @@ spring:
 
 python:
   base-url: ${PYTHON_BASE_URL:http://localhost:8000}
+  # read(응답) 타임아웃(초). FastAPI 배치 캡(300s)보다 살짝 길게 — 워치독 역할.
+  response-timeout-seconds: ${PYTHON_RESPONSE_TIMEOUT_SECONDS:310}
 
 # 분석 잡(미분석 FATAL → FastAPI 분석 → 저장). 트리거는 코드에서 @Profile(local/prod)에서만 동작한다.
 analysis:
