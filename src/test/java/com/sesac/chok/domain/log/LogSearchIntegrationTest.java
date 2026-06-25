@@ -199,4 +199,13 @@ class LogSearchIntegrationTest {
                 .andExpect(jsonPath("$.first").value(true))
                 .andExpect(jsonPath("$.last").value(false));
     }
+
+    @Test
+    void returnsBadRequestWhenStartAtAfterEndAt() throws Exception {
+        mockMvc.perform(get(LOGS)
+                        .param("startAt", "2026-06-18T23:59:59")
+                        .param("endAt", "2026-06-17T00:00:00"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_DATE_RANGE"));
+    }
 }

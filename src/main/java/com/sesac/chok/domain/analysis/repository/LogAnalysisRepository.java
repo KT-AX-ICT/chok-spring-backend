@@ -112,4 +112,24 @@ public interface LogAnalysisRepository extends JpaRepository<LogAnalysis, Long> 
     /** 패턴 목록(§3.5): 패턴별 관련 분석 건수를 집계. clusterId=null(정상 로그)은 제외. */
     @Query("SELECT a.clusterId, COUNT(a) FROM LogAnalysis a WHERE a.clusterId IS NOT NULL GROUP BY a.clusterId")
     List<Object[]> countGroupByClusterId();
+
+    /** 패턴(cluster)별 최고 심각도 projection. severity ordinal: 긴급4·높음3·보통2·낮음1. */
+    interface ClusterRiskLevel {
+        Long getClusterId();
+
+        int getSeverity();
+    }
+
+    /**
+     * 패턴 목록·상세(§3.5·§3.6)의 패턴 riskLevel(유저 노출값) 산출용 집계.
+     * {@code cluster_id}별로 묶인 분석들의 {@code risk_level} <b>최고 심각도</b>(긴급&gt;높음&gt;보통&gt;낮음)를
+     * ordinal로 돌려준다. importance가 아니라 실제 분석 데이터 기준(pattern_view엔 riskLevel 컬럼 없음).
+     */
+    @Query("SELECT a.clusterId AS clusterId, "
+            + "MAX(CASE a.riskLevel WHEN '긴급' THEN 4 WHEN '높음' THEN 3 "
+            + "WHEN '보통' THEN 2 WHEN '낮음' THEN 1 ELSE 0 END) AS severity "
+            + "FROM LogAnalysis a "
+            + "WHERE a.clusterId IS NOT NULL AND a.riskLevel IS NOT NULL "
+            + "GROUP BY a.clusterId")
+    List<ClusterRiskLevel> findMaxSeverityByCluster();
 }

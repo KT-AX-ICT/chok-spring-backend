@@ -5,6 +5,7 @@ import com.sesac.chok.domain.dashboard.dto.DashboardResponse;
 import com.sesac.chok.domain.log.dto.LogAggregateView;
 import com.sesac.chok.domain.log.entity.BglLog;
 import com.sesac.chok.domain.log.repository.BglLogRepository;
+import com.sesac.chok.global.error.InvalidDateRangeException;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -57,6 +58,7 @@ public class DashboardService {
 
     @Transactional(readOnly = true)
     public DashboardResponse getDashboard(LocalDateTime startAt, LocalDateTime endAt, String interval) {
+        InvalidDateRangeException.check(startAt, endAt);
         LocalDateTime calculatedEndAt = endAt != null ? endAt : LocalDateTime.now().withNano(0);
         LocalDateTime calculatedStartAt = startAt != null ? startAt : calculatedEndAt.minusHours(24);
         String calculatedInterval = interval != null && !interval.isBlank() ? interval : "1h";

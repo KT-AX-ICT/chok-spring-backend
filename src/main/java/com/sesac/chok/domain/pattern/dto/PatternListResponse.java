@@ -5,11 +5,12 @@ import java.util.Map;
 import org.springframework.data.domain.Page;
 
 /**
- * `GET /log-patterns` 전용 응답. importance 레벨별 패턴 수 집계를 추가로 포함한다.
+ * `GET /log-patterns` 전용 응답. riskLevel(높음/보통/낮음)별 패턴 수 집계({@code riskLevelSummary})를
+ * 추가로 포함한다. (importance는 내부 정렬 기준일 뿐 유저 노출값은 riskLevel.)
  */
 public record PatternListResponse(
         List<PatternSummary> content,
-        Map<String, Long> importanceSummary,
+        Map<String, Long> riskLevelSummary,
         int page,
         int size,
         long totalElements,
@@ -17,9 +18,9 @@ public record PatternListResponse(
         boolean first,
         boolean last) {
 
-    public static PatternListResponse of(Page<PatternSummary> page, Map<String, Long> importanceSummary) {
+    public static PatternListResponse of(Page<PatternSummary> page, Map<String, Long> riskLevelSummary) {
         return new PatternListResponse(
-                page.getContent(), importanceSummary,
+                page.getContent(), riskLevelSummary,
                 page.getNumber(), page.getSize(), page.getTotalElements(),
                 page.getTotalPages(), page.isFirst(), page.isLast());
     }

@@ -11,7 +11,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
 import lombok.AccessLevel;
@@ -23,7 +23,8 @@ import org.hibernate.annotations.CreationTimestamp;
 
 /**
  * AI 로그 진단/분석 결과 ({@code log_analysis}).
- * <p>원시 로그({@code bgl_log})와 N:1. 패턴 클러스터({@code cluster_id})는 현재 스칼라 FK로만 보관한다.
+ * <p>원시 로그({@code bgl_log})와 1:1({@code log_id} UNIQUE) — 로그당 분석 1건을 보장해 중복 적재를 원천 차단한다.
+ * 패턴 클러스터({@code cluster_id})는 현재 스칼라 FK로만 보관한다.
  */
 @Entity
 @Table(name = "log_analysis")
@@ -37,8 +38,8 @@ public class LogAnalysis {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "log_id", nullable = false)
+    @OneToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "log_id", nullable = false, unique = true)
     private BglLog log;
 
     @Enumerated(EnumType.STRING)

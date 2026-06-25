@@ -1,5 +1,6 @@
 package com.sesac.chok.domain.pattern;
 
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -44,8 +45,18 @@ class PatternIntegrationTest {
         patternViewRepository.deleteAllInBatch();
     }
 
+    /** 주어진 패턴(clusterId)에 risk_level 한 건짜리 분석을 적재한다(최고 심각도 집계 검증용). */
+    private void saveAnalysis(Long clusterId, String riskLevel) {
+        BglLog log = bglLogRepository.save(BglLog.builder()
+                .occurredAt(TS).node("node").component("KERNEL").logType("RAS")
+                .logLevel("FATAL").isAbnormal(true).content("err").build());
+        logAnalysisRepository.save(LogAnalysis.builder()
+                .log(log).domain(Domain.BGL).riskLevel(riskLevel).summary("s").analysis("a")
+                .action("[]").clusterId(clusterId).analyzedAt(TS).build());
+    }
+
     @Test
-    void 패턴_목록_count_riskLevel_포함() throws Exception {
+    void 패턴_목록_count_와_최고심각도_riskLevel_포함() throws Exception {
         PatternView p1 = patternViewRepository.save(
                 PatternView.builder().id(1L).patternName("TLB Error").description("TLB 오류")
                         .eventTemplate("data TLB error").importance(3).build());
@@ -53,23 +64,20 @@ class PatternIntegrationTest {
                 PatternView.builder().id(2L).patternName("DDR Error").description("DDR 오류")
                         .eventTemplate("ddr error threshold").importance(2).build());
 
-        BglLog log = bglLogRepository.save(BglLog.builder()
-                .occurredAt(TS).node("node-A").component("KERNEL").logType("RAS")
-                .logLevel("FATAL").isAbnormal(true).content("data TLB error interrupt").build());
-
-        logAnalysisRepository.save(LogAnalysis.builder()
-                .log(log).domain(Domain.BGL).riskLevel("높음").summary("요약").analysis("분석")
-                .action("[]").clusterId(p1.getId()).analyzedAt(TS).build());
+        // p1: 분석 2건(높음·긴급) → 최고 심각도 = 긴급, count 2
+        saveAnalysis(p1.getId(), "높음");
+        saveAnalysis(p1.getId(), "긴급");
+        // p2: 분석 1건(보통) → 보통, count 1
+        saveAnalysis(p2.getId(), "보통");
 
         mockMvc.perform(get(LIST_URL))
                 .andExpect(status().isOk())
-                // importance DESC 정렬 → p1(3) 먼저
+                // importance DESC 정렬(내부 기준) → p1(3) 먼저
                 .andExpect(jsonPath("$.content[0].patternId").value(1))
-                .andExpect(jsonPath("$.content[0].patternName").value("TLB Error"))
-                .andExpect(jsonPath("$.content[0].count").value(1))
-                .andExpect(jsonPath("$.content[0].riskLevel").value("높음"))
+                .andExpect(jsonPath("$.content[0].count").value(2))
+                .andExpect(jsonPath("$.content[0].riskLevel").value("긴급")) // 높음·긴급 중 최고
                 .andExpect(jsonPath("$.content[1].patternId").value(2))
-                .andExpect(jsonPath("$.content[1].count").value(0))
+                .andExpect(jsonPath("$.content[1].count").value(1))
                 .andExpect(jsonPath("$.content[1].riskLevel").value("보통"))
                 .andExpect(jsonPath("$.totalElements").value(2));
     }
@@ -98,6 +106,7 @@ class PatternIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.patternId").value(1))
                 .andExpect(jsonPath("$.patternName").value("TLB Error"))
+                .andExpect(jsonPath("$.riskLevel").value("긴급")) // 관련 분석 높음·긴급 중 최고 심각도
                 .andExpect(jsonPath("$.relatedLogs").isArray())
                 // occurredAt DESC → logLate(09:30) 먼저
                 .andExpect(jsonPath("$.relatedLogs[0].node").value("node-B"))
@@ -106,16 +115,49 @@ class PatternIntegrationTest {
     }
 
     @Test
-    void 패턴_목록_importanceSummary_포함() throws Exception {
-        patternViewRepository.save(PatternView.builder().id(10L).patternName("A").importance(3).build());
-        patternViewRepository.save(PatternView.builder().id(11L).patternName("B").importance(3).build());
-        patternViewRepository.save(PatternView.builder().id(12L).patternName("C").importance(2).build());
+    void 패턴_목록_riskLevelSummary_최고심각도별_패턴수() throws Exception {
+        PatternView a = patternViewRepository.save(PatternView.builder().id(10L).patternName("A").importance(3).build());
+        PatternView b = patternViewRepository.save(PatternView.builder().id(11L).patternName("B").importance(3).build());
+        PatternView c = patternViewRepository.save(PatternView.builder().id(12L).patternName("C").importance(2).build());
+        // A 최고=긴급, B 최고=긴급(높음·긴급), C 최고=높음 → 긴급 2 / 높음 1
+        saveAnalysis(a.getId(), "긴급");
+        saveAnalysis(b.getId(), "높음");
+        saveAnalysis(b.getId(), "긴급");
+        saveAnalysis(c.getId(), "높음");
 
         mockMvc.perform(get(LIST_URL))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.importanceSummary.높음").value(2))
-                .andExpect(jsonPath("$.importanceSummary.보통").value(1))
-                .andExpect(jsonPath("$.importanceSummary.낮음").value(0));
+                .andExpect(jsonPath("$.riskLevelSummary.긴급").value(2))
+                .andExpect(jsonPath("$.riskLevelSummary.높음").value(1))
+                .andExpect(jsonPath("$.riskLevelSummary.보통").value(0))
+                .andExpect(jsonPath("$.riskLevelSummary.낮음").value(0));
+    }
+
+    @Test
+    void 분석없는_패턴은_riskLevel_null() throws Exception {
+        patternViewRepository.save(PatternView.builder().id(5L).patternName("Empty").importance(1).build());
+
+        mockMvc.perform(get(LIST_URL))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].count").value(0))
+                .andExpect(jsonPath("$.content[0].riskLevel").value(nullValue())); // 분석 없으면 null
+    }
+
+    @Test
+    void 패턴_riskLevel_필터_해당_최고심각도_패턴만_반환() throws Exception {
+        PatternView urgent = patternViewRepository.save(
+                PatternView.builder().id(20L).patternName("긴급군").importance(3).build());
+        PatternView moderate = patternViewRepository.save(
+                PatternView.builder().id(21L).patternName("보통군").importance(2).build());
+        saveAnalysis(urgent.getId(), "긴급");
+        saveAnalysis(moderate.getId(), "보통");
+
+        mockMvc.perform(get(LIST_URL).param("riskLevel", "긴급"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].patternId").value(20))
+                .andExpect(jsonPath("$.content[0].riskLevel").value("긴급"))
+                .andExpect(jsonPath("$.totalElements").value(1));
     }
 
     @Test

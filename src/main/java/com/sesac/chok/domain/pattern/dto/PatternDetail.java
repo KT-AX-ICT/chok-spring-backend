@@ -13,4 +13,5 @@ public record PatternDetail(
         String description,
         String representativeLog,
         Integer importance,
+        String riskLevel,
         List<LogSummary> relatedLogs) {}
