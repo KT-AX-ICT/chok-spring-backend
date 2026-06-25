@@ -8,6 +8,8 @@ import com.sesac.chok.domain.analysis.entity.LogAnalysis;
 import com.sesac.chok.domain.analysis.repository.LogAnalysisRepository;
 import com.sesac.chok.domain.log.entity.BglLog;
 import com.sesac.chok.domain.log.repository.BglLogRepository;
+import com.sesac.chok.domain.pattern.entity.PatternView;
+import com.sesac.chok.domain.pattern.repository.PatternViewRepository;
 import com.sesac.chok.global.type.Domain;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
@@ -35,6 +37,9 @@ class AnalysisIntegrationTest {
 
     @Autowired
     private BglLogRepository bglLogRepository;
+
+    @Autowired
+    private PatternViewRepository patternViewRepository;
 
     private static final LocalDateTime TS = LocalDateTime.of(2026, 6, 18, 8, 30, 0);
 
@@ -129,6 +134,31 @@ class AnalysisIntegrationTest {
                 .andExpect(jsonPath("$.content[0].responsePlan.length()").value(3))
                 .andExpect(jsonPath("$.content[0].responsePlan[0]").value("점검 실행"))
                 .andExpect(jsonPath("$.content[0].responsePlan[2]").value("로그 확인"));
+    }
+
+    @Test
+    void exposesClusterIdAndResolvedPatternName() throws Exception {
+        // cluster_id가 가리키는 pattern_view 제목을 patternName으로 해소해 내려준다.
+        // (테스트는 seed 비활성이라 패턴을 직접 적재한다.)
+        patternViewRepository.save(PatternView.builder()
+                .id(1L).patternName("마운트/파일시스템 실패군").importance(2).build());
+        repository.save(base(savedLog("node-PV", true)).clusterId(1L).build());
+
+        mockMvc.perform(get("/api/v1/analysis"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].clusterId").value(1))
+                .andExpect(jsonPath("$.content[0].patternName").value("마운트/파일시스템 실패군"));
+    }
+
+    @Test
+    void leavesPatternNameNullWhenClusterUnresolved() throws Exception {
+        // 존재하지 않는 cluster_id면 clusterId는 그대로 내려가되 patternName은 null.
+        repository.save(base(savedLog("node-NOPV", true)).clusterId(98L).build());
+
+        mockMvc.perform(get("/api/v1/analysis"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].clusterId").value(98))
+                .andExpect(jsonPath("$.content[0].patternName").doesNotExist());
     }
 
     @Test

@@ -7,6 +7,8 @@ import com.sesac.chok.domain.analysis.dto.AnalysisDto;
 import com.sesac.chok.domain.analysis.entity.LogAnalysis;
 import com.sesac.chok.domain.analysis.repository.LogAnalysisRepository;
 import com.sesac.chok.domain.log.entity.BglLog;
+import com.sesac.chok.domain.pattern.entity.PatternView;
+import com.sesac.chok.domain.pattern.repository.PatternViewRepository;
 import com.sesac.chok.global.dto.PageResponse;
 import com.sesac.chok.global.type.Domain;
 import java.time.LocalDateTime;
@@ -25,6 +27,9 @@ class AnalysisServiceTest {
 
     @Mock
     private LogAnalysisRepository logAnalysisRepository;
+
+    @Mock
+    private PatternViewRepository patternViewRepository;
 
     @InjectMocks
     private AnalysisService analysisService;
@@ -56,6 +61,8 @@ class AnalysisServiceTest {
         Pageable pageable = PageRequest.of(0, 50);
         given(logAnalysisRepository.search(null, pageable))
                 .willReturn(new PageImpl<>(List.of(entity), pageable, 1));
+        given(patternViewRepository.findAllById(List.of(12L)))
+                .willReturn(List.of(PatternView.builder().id(12L).patternName("Data TLB Error").build()));
 
         PageResponse<AnalysisDto> result = analysisService.getAnalysisList(null, pageable);
 
@@ -66,6 +73,8 @@ class AnalysisServiceTest {
         assertThat(dto.analysisId()).isEqualTo(501L);
         assertThat(dto.domain()).isEqualTo(Domain.BGL);
         assertThat(dto.riskLevel()).isEqualTo("높음");
+        assertThat(dto.clusterId()).isEqualTo(12L);
+        assertThat(dto.patternName()).isEqualTo("Data TLB Error");
         assertThat(dto.aiSummary()).isEqualTo("커널 데이터 TLB 오류 반복");
         assertThat(dto.analysis()).isEqualTo("동일 노드에서 단시간 다수 TLB 오류 발생");
         assertThat(dto.responsePlan()).containsExactly("노드 격리/점검", "메모리 컨트롤러 진단");
