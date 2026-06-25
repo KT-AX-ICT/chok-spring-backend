@@ -15,10 +15,10 @@ analysis:
     enabled: ${ANALYSIS_SCHEDULER_ENABLED:true}                     # 5분 주기 자동 분석(기본 ON). false로 끔
     fixed-rate-ms: ${ANALYSIS_SCHEDULER_FIXED_RATE_MS:300000}        # 주기(5분)
     initial-delay-ms: ${ANALYSIS_SCHEDULER_INITIAL_DELAY_MS:15000}   # 첫 실행 지연(seed 적재 경합 회피)
-  run-on-startup: ${ANALYSIS_RUN_ON_STARTUP:false}                   # 시작 시 1회 자동 분석(명시 opt-in)
+  run-on-startup: ${ANALYSIS_RUN_ON_STARTUP:true}                    # 시작 시 1회 자동 분석(기본 ON). false로 끔
   chunk-size: ${ANALYSIS_CHUNK_SIZE:20}                              # FastAPI batch 묶음 크기
   default-limit: ${ANALYSIS_DEFAULT_LIMIT:200}                       # 스케줄러 1주기 처리 상한
-  startup-limit: ${ANALYSIS_STARTUP_LIMIT:500}                       # 시작 1회 처리 상한
+  startup-limit: ${ANALYSIS_STARTUP_LIMIT:300}                       # 시작 1회 처리 상한
 
 ---
 spring:
