@@ -6,11 +6,15 @@ import java.util.List;
 
 /**
  * 분석 목록(`GET /analysis`) 응답 항목. `log_analysis` 한 건 + 원시 로그({@code bgl_log}) 요약.
+ * {@code clusterId}는 {@code log_analysis.cluster_id}(=pattern_view PK), {@code patternName}은 그 클러스터의
+ * 제목이다(정상·미분류 등으로 패턴이 없으면 둘 다 {@code null}/제목 미해소).
  */
 public record AnalysisDto(
         Long analysisId,
         Domain domain,
         String riskLevel,
+        Long clusterId,
+        String patternName,
         String aiSummary,
         String analysis,
         List<String> responsePlan,

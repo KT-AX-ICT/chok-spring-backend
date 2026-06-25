@@ -8,6 +8,8 @@ import com.sesac.chok.domain.analysis.entity.LogAnalysis;
 import com.sesac.chok.domain.analysis.repository.LogAnalysisRepository;
 import com.sesac.chok.domain.log.entity.BglLog;
 import com.sesac.chok.domain.log.repository.BglLogRepository;
+import com.sesac.chok.domain.pattern.entity.PatternView;
+import com.sesac.chok.domain.pattern.repository.PatternViewRepository;
 import com.sesac.chok.global.type.Domain;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
@@ -35,6 +37,9 @@ class AnalysisIntegrationTest {
 
     @Autowired
     private BglLogRepository bglLogRepository;
+
+    @Autowired
+    private PatternViewRepository patternViewRepository;
 
     private static final LocalDateTime TS = LocalDateTime.of(2026, 6, 18, 8, 30, 0);
 
@@ -68,11 +73,11 @@ class AnalysisIntegrationTest {
     void returnsPersistedRowsWithNestedLogSortedByAnalyzedAtDesc() throws Exception {
         // 저장 순서(id)와 분석 시점(analyzedAt)을 일부러 어긋나게 둔다.
         // 먼저 저장(낮은 id)이지만 분석은 더 나중(09:00) → analyzedAt,desc면 이 행이 맨 앞.
-        BglLog newerLog = savedLog("node-NEWER", null); // FATAL 미분석 → 1차 안전망 주의
+        BglLog newerLog = savedLog("node-NEWER", true); // 2차 이상 판정 → 주의 목록 노출
         LogAnalysis newer = repository.save(base(newerLog).summary("analyzed-later")
                 .analyzedAt(LocalDateTime.of(2026, 6, 18, 9, 0, 0)).build());
         // 나중 저장(높은 id)이지만 분석은 더 이전(08:00).
-        repository.save(base(savedLog("node-OLDER", null)).summary("analyzed-earlier")
+        repository.save(base(savedLog("node-OLDER", true)).summary("analyzed-earlier")
                 .analyzedAt(LocalDateTime.of(2026, 6, 18, 8, 0, 0)).build());
 
         mockMvc.perform(get("/api/v1/analysis"))
@@ -93,20 +98,25 @@ class AnalysisIntegrationTest {
     }
 
     @Test
-    void marksLogAsNotCautionWhenSecondPassNormal() throws Exception {
-        // FATAL이어도 2차가 정상(isAbnormal=false)이면 비주의(2차 우선).
-        repository.save(base(savedLog("node-N", false)).build());
+    void excludesNormalAndUnanalyzedFromList() throws Exception {
+        // "주의 로그 AI 분석" 목록은 2차 이상 판정(isAbnormal=true)만 노출한다.
+        // 2차 정상(false)·2차 전 미분석(null) 분석은 제외 — 정상 분석이 섞이던 버그 방지.
+        repository.save(base(savedLog("node-ABNORMAL", true)).summary("이상-노출").build());
+        repository.save(base(savedLog("node-NORMAL", false)).summary("정상-제외").build());
+        repository.save(base(savedLog("node-PENDING", null)).summary("미분석-제외").build());
 
         mockMvc.perform(get("/api/v1/analysis"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.content[0].log.isCaution").value(false))
-                .andExpect(jsonPath("$.content[0].log.label").doesNotExist());
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].aiSummary").value("이상-노출"))
+                .andExpect(jsonPath("$.content[0].log.node").value("node-ABNORMAL"));
     }
 
     @Test
     void parsesJsonArrayAndNewlineActionFormats() throws Exception {
         // JSON 배열 포맷
-        repository.save(base(savedLog("node-J", null)).action("[\"노드 격리\", \"보드 교체\"]").build());
+        repository.save(base(savedLog("node-J", true)).action("[\"노드 격리\", \"보드 교체\"]").build());
 
         mockMvc.perform(get("/api/v1/analysis"))
                 .andExpect(status().isOk())
@@ -117,13 +127,38 @@ class AnalysisIntegrationTest {
         repository.deleteAll();
 
         // 줄바꿈 구분 포맷
-        repository.save(base(savedLog("node-K", null)).action("점검 실행\n재시작\n로그 확인").build());
+        repository.save(base(savedLog("node-K", true)).action("점검 실행\n재시작\n로그 확인").build());
 
         mockMvc.perform(get("/api/v1/analysis"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].responsePlan.length()").value(3))
                 .andExpect(jsonPath("$.content[0].responsePlan[0]").value("점검 실행"))
                 .andExpect(jsonPath("$.content[0].responsePlan[2]").value("로그 확인"));
+    }
+
+    @Test
+    void exposesClusterIdAndResolvedPatternName() throws Exception {
+        // cluster_id가 가리키는 pattern_view 제목을 patternName으로 해소해 내려준다.
+        // (테스트는 seed 비활성이라 패턴을 직접 적재한다.)
+        patternViewRepository.save(PatternView.builder()
+                .id(1L).patternName("마운트/파일시스템 실패군").importance(2).build());
+        repository.save(base(savedLog("node-PV", true)).clusterId(1L).build());
+
+        mockMvc.perform(get("/api/v1/analysis"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].clusterId").value(1))
+                .andExpect(jsonPath("$.content[0].patternName").value("마운트/파일시스템 실패군"));
+    }
+
+    @Test
+    void leavesPatternNameNullWhenClusterUnresolved() throws Exception {
+        // 존재하지 않는 cluster_id면 clusterId는 그대로 내려가되 patternName은 null.
+        repository.save(base(savedLog("node-NOPV", true)).clusterId(98L).build());
+
+        mockMvc.perform(get("/api/v1/analysis"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].clusterId").value(98))
+                .andExpect(jsonPath("$.content[0].patternName").doesNotExist());
     }
 
     @Test
@@ -138,10 +173,10 @@ class AnalysisIntegrationTest {
 
     @Test
     void filtersAnalysisByKeywordAcrossSummaryAnalysisAction() throws Exception {
-        repository.save(base(savedLog("node-S", null)).summary("TLB오류 발생").build());
-        repository.save(base(savedLog("node-A", null)).analysis("메모리 누수 감지").build());
-        repository.save(base(savedLog("node-P", null)).action("[\"재시작 필요\"]").build());
-        repository.save(base(savedLog("node-X", null)).summary("정상 동작").build());
+        repository.save(base(savedLog("node-S", true)).summary("TLB오류 발생").build());
+        repository.save(base(savedLog("node-A", true)).analysis("메모리 누수 감지").build());
+        repository.save(base(savedLog("node-P", true)).action("[\"재시작 필요\"]").build());
+        repository.save(base(savedLog("node-X", true)).summary("정상 동작").build());
 
         mockMvc.perform(get("/api/v1/analysis").param("keyword", "TLB"))
                 .andExpect(status().isOk())
@@ -165,9 +200,9 @@ class AnalysisIntegrationTest {
 
     @Test
     void respectsPageAndSizeParams() throws Exception {
-        repository.save(base(savedLog("node-1", null)).build());
-        repository.save(base(savedLog("node-2", null)).build());
-        repository.save(base(savedLog("node-3", null)).build());
+        repository.save(base(savedLog("node-1", true)).build());
+        repository.save(base(savedLog("node-2", true)).build());
+        repository.save(base(savedLog("node-3", true)).build());
 
         mockMvc.perform(get("/api/v1/analysis").param("page", "0").param("size", "2"))
                 .andExpect(status().isOk())

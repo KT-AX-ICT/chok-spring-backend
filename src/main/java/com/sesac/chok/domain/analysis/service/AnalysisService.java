@@ -7,11 +7,18 @@ import com.sesac.chok.domain.analysis.repository.LogAnalysisRepository;
 import com.sesac.chok.domain.log.entity.BglLog;
 import com.sesac.chok.domain.log.repository.BglLogRepository;
 import com.sesac.chok.domain.log.repository.BglTemplateRepository;
+import com.sesac.chok.domain.pattern.entity.PatternView;
+import com.sesac.chok.domain.pattern.repository.PatternViewRepository;
 import com.sesac.chok.global.dto.PageResponse;
 import com.sesac.chok.global.error.NotFoundException;
 import java.time.LocalDateTime;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,9 +32,26 @@ public class AnalysisService {
     private final LogAnalysisRepository logAnalysisRepository;
     private final BglLogRepository bglLogRepository;
     private final BglTemplateRepository bglTemplateRepository;
+    private final PatternViewRepository patternViewRepository;
 
     public PageResponse<AnalysisDto> getAnalysisList(String keyword, Pageable pageable) {
-        return PageResponse.of(logAnalysisRepository.search(keyword, pageable).map(this::toDto));
+        Page<LogAnalysis> page = logAnalysisRepository.search(keyword, pageable);
+        Map<Long, String> patternNames = resolvePatternNames(page.getContent());
+        return PageResponse.of(page.map(entity -> toDto(entity, patternNames)));
+    }
+
+    /**
+     * 페이지에 등장한 {@code cluster_id}들의 패턴 제목을 한 번에 조회해 맵으로 돌려준다(행별 조회 N+1 회피).
+     * {@code cluster_id}↔{@code pattern_view}는 JPA 연관 없이 스칼라 FK라 명시적으로 해소한다.
+     */
+    private Map<Long, String> resolvePatternNames(List<LogAnalysis> analyses) {
+        List<Long> clusterIds = analyses.stream()
+                .map(LogAnalysis::getClusterId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        return patternViewRepository.findAllById(clusterIds).stream()
+                .collect(Collectors.toMap(PatternView::getId, PatternView::getPatternName));
     }
 
     /**
@@ -75,11 +99,13 @@ public class AnalysisService {
         }
     }
 
-    private AnalysisDto toDto(LogAnalysis entity) {
+    private AnalysisDto toDto(LogAnalysis entity, Map<Long, String> patternNames) {
         return new AnalysisDto(
                 entity.getId(),
                 entity.getDomain(),
                 entity.getRiskLevel(),
+                entity.getClusterId(),
+                patternNames.get(entity.getClusterId()),
                 entity.getSummary(),
                 entity.getAnalysis(),
                 ResponsePlanParser.parse(entity.getAction()),

@@ -195,12 +195,10 @@ P0 범위는 다음 흐름을 우선합니다.
 공유 지침 파일:
 
 - `AGENTS.md`
-- `CLAUDE.md`
 
 개인 로컬 지침 파일은 Git에서 제외됩니다.
 
 - `AGENTS.local.md`
-- `CLAUDE.local.md`
 
 로컬 지침 파일, `.env`, secret, credential, key, private config 파일은 커밋하거나 업로드하지 않습니다.
 

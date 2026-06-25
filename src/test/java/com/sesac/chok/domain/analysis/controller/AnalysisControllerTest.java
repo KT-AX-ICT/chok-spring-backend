@@ -37,7 +37,7 @@ class AnalysisControllerTest {
                 1001L, LocalDateTime.of(2026, 6, 18, 8, 30, 0), "R02-M1-N0-C:J12-U11",
                 "KERNEL", "RAS", "FATAL", "data TLB error interrupt", true);
         AnalysisDto dto = new AnalysisDto(
-                501L, Domain.BGL, "높음",
+                501L, Domain.BGL, "높음", 0L, "메모리/인터럽트군",
                 "커널 데이터 TLB 오류 반복", "동일 노드 다수 발생",
                 List.of("노드 격리/점검", "메모리 컨트롤러 진단"), logInfo);
         given(analysisService.getAnalysisList(isNull(), any(Pageable.class)))
@@ -48,6 +48,8 @@ class AnalysisControllerTest {
                 .andExpect(jsonPath("$.content[0].analysisId").value(501))
                 .andExpect(jsonPath("$.content[0].domain").value("BGL"))
                 .andExpect(jsonPath("$.content[0].riskLevel").value("높음"))
+                .andExpect(jsonPath("$.content[0].clusterId").value(0))
+                .andExpect(jsonPath("$.content[0].patternName").value("메모리/인터럽트군"))
                 .andExpect(jsonPath("$.content[0].aiSummary").value("커널 데이터 TLB 오류 반복"))
                 .andExpect(jsonPath("$.content[0].responsePlan[0]").value("노드 격리/점검"))
                 .andExpect(jsonPath("$.content[0].log.logId").value(1001))
