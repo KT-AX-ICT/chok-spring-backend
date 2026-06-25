@@ -51,6 +51,15 @@ class DashboardControllerTest {
     }
 
     @Test
+    void getDashboardSummaryReturnsBadRequestWhenStartAtAfterEndAt() throws Exception {
+        mockMvc.perform(get(DASHBOARD_SUMMARY_URL)
+                        .param("startAt", "2026-06-18T23:59:59")
+                        .param("endAt", "2026-06-17T00:00:00"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_DATE_RANGE"));
+    }
+
+    @Test
     void getDashboardSummaryDefaultsToTwentyFourHourRange() throws Exception {
         MvcResult result = mockMvc.perform(get(DASHBOARD_SUMMARY_URL))
                 .andExpect(status().isOk())

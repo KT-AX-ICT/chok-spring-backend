@@ -11,6 +11,7 @@ import com.sesac.chok.domain.log.repository.BglLogRepository;
 import com.sesac.chok.domain.pattern.entity.PatternView;
 import com.sesac.chok.domain.pattern.repository.PatternViewRepository;
 import com.sesac.chok.global.dto.PageResponse;
+import com.sesac.chok.global.error.InvalidDateRangeException;
 import com.sesac.chok.global.error.NotFoundException;
 import java.util.Optional;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +33,7 @@ public class LogService {
     private final PatternViewRepository patternViewRepository;
 
     public PageResponse<LogSummary> getLogs(LogSearchCondition cond, Pageable pageable) {
+        InvalidDateRangeException.check(cond.startAt(), cond.endAt());
         return PageResponse.of(bglLogRepository.searchLogs(
                 cond.startAt(), cond.endAt(), cond.riskLevel(), cond.logType(), cond.component(),
                 cond.logLevel(), cond.keyword(), cond.isAbnormal(), cond.isCaution(), cond.isAnalysis(),
