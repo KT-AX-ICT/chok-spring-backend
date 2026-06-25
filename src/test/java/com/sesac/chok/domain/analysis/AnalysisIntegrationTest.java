@@ -69,6 +69,53 @@ class AnalysisIntegrationTest {
                 .createdAt(TS);
     }
 
+    private BglLog savedLogAt(String node, Boolean isAbnormal, LocalDateTime occurredAt) {
+        return bglLogRepository.save(BglLog.builder()
+                .occurredAt(occurredAt)
+                .node(node)
+                .component("KERNEL")
+                .logType("RAS")
+                .logLevel("FATAL")
+                .isAbnormal(isAbnormal)
+                .content("data TLB error interrupt")
+                .createdAt(occurredAt)
+                .build());
+    }
+
+    @Test
+    void filtersByRiskLevelExactMatch() throws Exception {
+        // 긴급도 단일 정확 일치 필터 — 한글값(긴급/높음/…) 그대로 비교, 매핑 없음.
+        repository.save(base(savedLog("node-URGENT", true)).riskLevel("긴급").summary("긴급건").build());
+        repository.save(base(savedLog("node-HIGH", true)).riskLevel("높음").summary("높음건").build());
+
+        mockMvc.perform(get("/api/v1/analysis").param("riskLevel", "긴급"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].riskLevel").value("긴급"))
+                .andExpect(jsonPath("$.content[0].aiSummary").value("긴급건"));
+
+        mockMvc.perform(get("/api/v1/analysis")) // 미지정 → 전체
+                .andExpect(jsonPath("$.totalElements").value(2));
+    }
+
+    @Test
+    void filtersByOccurredAtHalfOpenRange() throws Exception {
+        // 날짜 필터 = bgl_log.occurred_at 기준 반열린 구간 [startAt, endAt). endAt 경계는 제외.
+        repository.save(base(savedLogAt("node-before", true, LocalDateTime.of(2026, 6, 18, 8, 0, 0)))
+                .summary("범위전").build());
+        repository.save(base(savedLogAt("node-in", true, LocalDateTime.of(2026, 6, 20, 8, 0, 0)))
+                .summary("범위안").build());
+        repository.save(base(savedLogAt("node-edge", true, LocalDateTime.of(2026, 6, 21, 0, 0, 0)))
+                .summary("끝경계제외").build());
+
+        mockMvc.perform(get("/api/v1/analysis")
+                        .param("startAt", "2026-06-19T00:00:00")
+                        .param("endAt", "2026-06-21T00:00:00"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].aiSummary").value("범위안"));
+    }
+
     @Test
     void returnsPersistedRowsWithNestedLogSortedByAnalyzedAtDesc() throws Exception {
         // 저장 순서(id)와 분석 시점(analyzedAt)을 일부러 어긋나게 둔다.

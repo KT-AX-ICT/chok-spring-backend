@@ -16,13 +16,18 @@ public interface LogAnalysisRepository extends JpaRepository<LogAnalysis, Long> 
     /**
      * 목록 조회("주의 로그 AI 분석"). 2차 이상 판정({@code log.isAbnormal = true})만 반환한다 —
      * 정본은 {@code bgl_log.is_abnormal}이며 정상(false)·미분석(null) 분석은 제외한다.
-     * keyword가 null이면 이상 판정 전체 반환. summary·analysis·action OR 부분검색.
+     * <p>다중 nullable 필터(미지정=null이면 조건 제외): 날짜는 {@code log.occurredAt} 반열린
+     * 구간 {@code [startAt, endAt)}, {@code riskLevel}은 단일 정확 일치, keyword는
+     * summary·analysis·action OR 부분검색.
      */
     @EntityGraph(attributePaths = "log")
     @Query(value = """
             SELECT a FROM LogAnalysis a
             WHERE a.log.isAbnormal = TRUE
-              AND (:keyword IS NULL
+              AND (:startAt   IS NULL OR a.log.occurredAt >= :startAt)
+              AND (:endAt     IS NULL OR a.log.occurredAt <  :endAt)
+              AND (:riskLevel IS NULL OR a.riskLevel = :riskLevel)
+              AND (:keyword   IS NULL
                OR a.summary  LIKE CONCAT('%', :keyword, '%')
                OR a.analysis LIKE CONCAT('%', :keyword, '%')
                OR a.action   LIKE CONCAT('%', :keyword, '%'))
@@ -30,12 +35,20 @@ public interface LogAnalysisRepository extends JpaRepository<LogAnalysis, Long> 
             countQuery = """
             SELECT COUNT(a) FROM LogAnalysis a
             WHERE a.log.isAbnormal = TRUE
-              AND (:keyword IS NULL
+              AND (:startAt   IS NULL OR a.log.occurredAt >= :startAt)
+              AND (:endAt     IS NULL OR a.log.occurredAt <  :endAt)
+              AND (:riskLevel IS NULL OR a.riskLevel = :riskLevel)
+              AND (:keyword   IS NULL
                OR a.summary  LIKE CONCAT('%', :keyword, '%')
                OR a.analysis LIKE CONCAT('%', :keyword, '%')
                OR a.action   LIKE CONCAT('%', :keyword, '%'))
             """)
-    Page<LogAnalysis> search(@Param("keyword") String keyword, Pageable pageable);
+    Page<LogAnalysis> search(
+            @Param("startAt") LocalDateTime startAt,
+            @Param("endAt") LocalDateTime endAt,
+            @Param("riskLevel") String riskLevel,
+            @Param("keyword") String keyword,
+            Pageable pageable);
 
     /** 위험도 분포 집계 projection. */
     interface RiskLevelCount {

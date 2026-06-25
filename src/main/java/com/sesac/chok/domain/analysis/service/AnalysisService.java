@@ -2,6 +2,7 @@ package com.sesac.chok.domain.analysis.service;
 
 import com.sesac.chok.domain.analysis.dto.AnalysisDto;
 import com.sesac.chok.domain.analysis.dto.AnalysisResultCommand;
+import com.sesac.chok.domain.analysis.dto.AnalysisSearchCondition;
 import com.sesac.chok.domain.analysis.entity.LogAnalysis;
 import com.sesac.chok.domain.analysis.repository.LogAnalysisRepository;
 import com.sesac.chok.domain.log.entity.BglLog;
@@ -34,8 +35,9 @@ public class AnalysisService {
     private final BglTemplateRepository bglTemplateRepository;
     private final PatternViewRepository patternViewRepository;
 
-    public PageResponse<AnalysisDto> getAnalysisList(String keyword, Pageable pageable) {
-        Page<LogAnalysis> page = logAnalysisRepository.search(keyword, pageable);
+    public PageResponse<AnalysisDto> getAnalysisList(AnalysisSearchCondition condition, Pageable pageable) {
+        Page<LogAnalysis> page = logAnalysisRepository.search(
+                condition.startAt(), condition.endAt(), condition.riskLevel(), condition.keyword(), pageable);
         Map<Long, String> patternNames = resolvePatternNames(page.getContent());
         return PageResponse.of(page.map(entity -> toDto(entity, patternNames)));
     }

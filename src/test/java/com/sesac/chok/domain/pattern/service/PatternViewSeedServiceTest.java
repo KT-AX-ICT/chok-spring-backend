@@ -49,7 +49,7 @@ class PatternViewSeedServiceTest {
         seedService.initializeIfEmpty();
 
         PatternView c0 = patternViewRepository.findById(0L).orElseThrow();
-        assertThat(c0.getPatternName()).isEqualTo("메모리/인터럽트군");
+        assertThat(c0.getPatternName()).isEqualTo("메모리 인터럽트 오류군");
         assertThat(c0.getImportance()).isEqualTo(3); // High → 3
         assertThat(c0.getEventTemplate()).isEqualTo("data storage interrupt"); // 첫 템플릿
     }
