@@ -81,6 +81,9 @@ public class BatchAnalysisService {
                         try {
                             analysisService.saveAnalysisResult(toCommand(item));
                             saved++;
+                            log.info("[Batch] 적재 완료 logId={} eventId={} clusterId={} isAbnormal={} riskLevel={}",
+                                    item.logId(), item.eventId(),
+                                    item.result().clusterId(), item.isAbnormal(), item.result().riskLevel());
                         } catch (Exception e) {
                             failed++;
                             log.warn("[Batch] 결과 저장 실패 logId={} cause={}", item.logId(), e.toString());
