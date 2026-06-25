@@ -14,6 +14,8 @@
             <totalSizeCap>200MB</totalSizeCap>   <!-- 전체 용량 상한(마지막 방어선) -->
         </rollingPolicy>
         <encoder>
+            <!-- 실행 환경(JVM 기본 charset)에 의존하지 않도록 UTF-8 고정. 미지정 시 Windows에서 MS949로 기록되어 한글이 깨진다. -->
+            <charset>UTF-8</charset>
             <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n</pattern>
         </encoder>
     </appender>
