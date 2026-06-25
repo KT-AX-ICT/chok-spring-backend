@@ -1,0 +1,328 @@
+package com.sesac.chok.domain.dashboard.service;
+
+import com.sesac.chok.domain.analysis.repository.LogAnalysisRepository;
+import com.sesac.chok.domain.dashboard.dto.DashboardResponse;
+import com.sesac.chok.domain.log.dto.LogAggregateView;
+import com.sesac.chok.domain.log.entity.BglLog;
+import com.sesac.chok.domain.log.repository.BglLogRepository;
+import java.time.Duration;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.function.Function;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * 대시보드 집계 서비스.
+ *
+ * <p>{@link BglLogRepository}에서 {@code [startAt, endAt)} 범위의 로그를 한 번 조회해, 그 위에서
+ * 시간대 버킷팅·label 기반 caution 카운트·key별 분포·최근 주의 로그를 Java로 집계한다.
+ * interval이 가변(1h/5m/1d)이고 H2·MySQL을 모두 쓰므로 DB 날짜함수 대신 Java 버킷팅을 쓴다(이식성).
+ *
+ * <p>BglLog로 만드는 필드(총/주의 카운트, timeSeries, type/component/level 분포)와
+ * log_analysis로 만드는 필드(riskDistribution, analyzedLogCount, recentCautionLog.isAnalysis,
+ * recentPatterns)를 각각 실집계한다. recentPatterns는 log_analysis를 cluster_id별로 카운트해
+ * pattern_view와 join한다.
+ */
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class DashboardService {
+
+    private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
+    private static final String NORMAL_LABEL = "-";
+    private static final int RECENT_CAUTION_LIMIT = 5;
+    private static final int RECENT_PATTERN_LIMIT = 5;
+    private static final int MAX_BUCKETS = 200;
+    // 미분류 sentinel(Python이 비군집 분석에 채우는 cluster 번호). 반복 패턴 카드에서 제외.
+    private static final long UNCLASSIFIED_CLUSTER_ID = 99L;
+    // 도넛 고정 순서/구성 (PROJECT_CONTEXT riskLevel ENUM). 데이터에 없는 등급도 0으로 노출.
+    private static final List<String> RISK_LEVELS = List.of("긴급", "높음", "보통", "낮음");
+    // 컴포넌트 막대 고정 순서/구성 (현재 BGL seed의 component 집합). 창에 없는 컴포넌트도 0으로 노출.
+    private static final List<String> COMPONENTS = List.of("KERNEL", "APP", "MMCS", "DISCOVERY", "HARDWARE");
+
+    private final BglLogRepository bglLogRepository;
+    private final LogAnalysisRepository logAnalysisRepository;
+
+    @Transactional(readOnly = true)
+    public DashboardResponse getDashboard(LocalDateTime startAt, LocalDateTime endAt, String interval) {
+        LocalDateTime calculatedEndAt = endAt != null ? endAt : LocalDateTime.now().withNano(0);
+        LocalDateTime calculatedStartAt = startAt != null ? startAt : calculatedEndAt.minusHours(24);
+        String calculatedInterval = interval != null && !interval.isBlank() ? interval : "1h";
+
+        List<LogAggregateView> rows = bglLogRepository.findAggregateViewInRange(
+                calculatedStartAt, calculatedEndAt);
+        List<LogAnalysisRepository.RiskLevelCount> riskCounts =
+                logAnalysisRepository.countByRiskLevelInRange(calculatedStartAt, calculatedEndAt);
+        // 분석 완료 수: 범위 내 log_analysis row 합계 (로그당 분석 1건 가정).
+        int analyzedCount = riskCounts.stream().mapToInt(r -> (int) r.getCount()).sum();
+        // 정상 판정 수: 위험도가 없는(riskLevel=null) 분석 건. analyzedCount에는 포함되나 riskDistribution엔 빠지므로,
+        // 둘의 차이를 명시하기 위해 별도로 센다 (analyzedCount = riskDistribution 합 + normalCount).
+        int normalCount = riskCounts.stream()
+                .filter(r -> r.getRiskLevel() == null)
+                .mapToInt(r -> (int) r.getCount())
+                .sum();
+
+        log.info(
+                "[Dashboard] aggregated from {} bgl_log rows, {} analyses, startAt={}, endAt={}, interval={}",
+                rows.size(), analyzedCount, calculatedStartAt, calculatedEndAt, calculatedInterval
+        );
+
+        return new DashboardResponse(
+                range(calculatedStartAt, calculatedEndAt),
+                aggregateStats(rows, analyzedCount, normalCount),
+                aggregateTimeSeries(rows, calculatedStartAt, calculatedEndAt, calculatedInterval),
+                aggregateRiskDistribution(riskCounts),
+                aggregateTypeDistribution(rows),
+                aggregateComponentDistribution(rows),
+                aggregateLevelDistribution(rows),
+                aggregateRecentCautionLogs(rows),
+                aggregateRecentPatterns(calculatedStartAt, calculatedEndAt)
+        );
+    }
+
+    // ---------------------------------------------------------------------
+    // 집계 로직 (BglLog 단일 입력 기준)
+    // ---------------------------------------------------------------------
+
+    private static boolean isCaution(String label) {
+        return label != null && !NORMAL_LABEL.equals(label);
+    }
+
+    private DashboardResponse.Stats aggregateStats(List<LogAggregateView> rows, int analyzedCount, int normalCount) {
+        int total = rows.size();
+        int caution = (int) rows.stream().filter(r -> isCaution(r.label())).count();
+        return new DashboardResponse.Stats(total, caution, analyzedCount, normalCount);
+    }
+
+    /** log_analysis.risk_level GROUP BY 결과를 4단계 고정 순서(없는 등급 0)로 구성한다. */
+    private List<DashboardResponse.RiskDistributionItem> aggregateRiskDistribution(
+            List<LogAnalysisRepository.RiskLevelCount> riskCounts) {
+        Map<String, Integer> byLevel = new HashMap<>();
+        for (LogAnalysisRepository.RiskLevelCount c : riskCounts) {
+            if (c.getRiskLevel() != null) {
+                byLevel.merge(c.getRiskLevel(), (int) c.getCount(), Integer::sum);
+            }
+        }
+        LinkedHashMap<String, Integer> ordered = new LinkedHashMap<>();
+        RISK_LEVELS.forEach(level -> ordered.put(level, byLevel.getOrDefault(level, 0)));
+        byLevel.forEach(ordered::putIfAbsent); // 예상 외 등급도 누락 없이 노출
+        return ordered.entrySet().stream()
+                .map(e -> new DashboardResponse.RiskDistributionItem(e.getKey(), e.getValue()))
+                .toList();
+    }
+
+    /**
+     * 시간 버킷 집계. 동등 SQL 예시:
+     * <pre>
+     * SELECT bucket(occurred_at, :interval) AS time,
+     *        COUNT(*)                       AS totalCount,
+     *        SUM(CASE WHEN label &lt;&gt; '-' THEN 1 ELSE 0 END) AS cautionCount
+     * FROM bgl_log
+     * WHERE occurred_at &gt;= :startAt AND occurred_at &lt; :endAt
+     * GROUP BY time ORDER BY time
+     * </pre>
+     * 빈 버킷도 0으로 노출해야 line/area 차트가 빈 구간에서 바닥(0)으로 내려간다(보간 방지).
+     */
+    private List<DashboardResponse.TimeSeriesItem> aggregateTimeSeries(
+            List<LogAggregateView> rows, LocalDateTime startAt, LocalDateTime endAt, String interval) {
+        // 막대 하나의 시간 폭(초). interval(예: 1h)을 초로 바꾼 값.
+        long bucketSeconds = Math.max(parseInterval(interval).getSeconds(), 1);
+        // 조회 구간 전체 길이(초). 이 길이를 막대 폭으로 나눈 만큼 막대가 생긴다.
+        long rangeSeconds = Math.max(Duration.between(startAt, endAt).getSeconds(), 1);
+
+        // 막대 개수에는 상한(MAX_BUCKETS)이 있다. interval이 너무 잘면 막대가 이 상한을 넘는데,
+        // 그러면 상한을 넘는 뒷부분 로그가 차트에서 통째로 빠져 막대 합이 총계와 안 맞게 된다.
+        // 그래서 막대가 상한을 넘을 것 같으면, 막대 폭을 키워(=간격을 굵게) 전체 구간이 상한 안에
+        // 다 들어오도록 맞춘다. 이렇게 하면 데이터가 누락되지 않는다(요청 간격보다 굵어질 뿐).
+        long minBucketSeconds = (long) Math.ceil((double) rangeSeconds / MAX_BUCKETS);
+        if (bucketSeconds < minBucketSeconds) {
+            log.info("[Dashboard] interval이 너무 잘아 막대가 {}개를 넘어, 막대 폭을 {}초로 키워 전체 구간을 담는다. interval={}",
+                    MAX_BUCKETS, minBucketSeconds, interval);
+            bucketSeconds = minBucketSeconds;
+        }
+
+        // 각 막대의 시작 시각 목록. 빈 막대도 0으로 그려야 차트가 빈 구간에서 바닥(0)으로 내려간다(보간 방지).
+        Duration bucketStep = Duration.ofSeconds(bucketSeconds);
+        List<LocalDateTime> bucketStarts = new ArrayList<>();
+        for (LocalDateTime at = startAt; at.isBefore(endAt); at = at.plus(bucketStep)) {
+            bucketStarts.add(at);
+        }
+        if (bucketStarts.isEmpty()) {
+            bucketStarts.add(startAt);
+        }
+
+        int n = bucketStarts.size();
+        int[] total = new int[n];
+        int[] caution = new int[n];
+
+        for (LogAggregateView r : rows) {
+            LocalDateTime occurredAt = r.occurredAt();
+            if (occurredAt == null || occurredAt.isBefore(startAt) || !occurredAt.isBefore(endAt)) {
+                continue;
+            }
+            // 시작 시각으로부터 몇 번째 막대인지 계산. 위에서 막대 폭을 보정했으므로 idx는 항상 막대 범위 안이다.
+            int idx = (int) (Duration.between(startAt, occurredAt).getSeconds() / bucketSeconds);
+            if (idx < 0) {
+                continue;
+            }
+            if (idx >= n) {
+                idx = n - 1; // 경계/반올림 오차로 마지막을 살짝 넘는 경우, 마지막 막대에 넣어 누락을 막는다.
+            }
+            total[idx]++;
+            if (isCaution(r.label())) {
+                caution[idx]++;
+            }
+        }
+
+        List<DashboardResponse.TimeSeriesItem> items = new ArrayList<>(n);
+        for (int k = 0; k < n; k++) {
+            items.add(new DashboardResponse.TimeSeriesItem(format(bucketStarts.get(k)), total[k], caution[k]));
+        }
+        return items;
+    }
+
+    private List<DashboardResponse.TypeDistributionItem> aggregateTypeDistribution(List<LogAggregateView> rows) {
+        return countByDesc(rows, LogAggregateView::logType).entrySet().stream()
+                .map(e -> new DashboardResponse.TypeDistributionItem(e.getKey(), e.getValue()))
+                .toList();
+    }
+
+    /** 컴포넌트 분포를 고정 리스트 순서(없는 컴포넌트 0)로 구성한다. riskDistribution과 같은 0-fill 방식. */
+    private List<DashboardResponse.ComponentDistributionItem> aggregateComponentDistribution(List<LogAggregateView> rows) {
+        Map<String, Integer> counts = countByDesc(rows, LogAggregateView::component);
+        LinkedHashMap<String, Integer> ordered = new LinkedHashMap<>();
+        COMPONENTS.forEach(component -> ordered.put(component, counts.getOrDefault(component, 0)));
+        counts.forEach(ordered::putIfAbsent); // 고정 리스트에 없는 컴포넌트도 누락 없이 노출
+        return ordered.entrySet().stream()
+                .map(e -> new DashboardResponse.ComponentDistributionItem(e.getKey(), e.getValue()))
+                .toList();
+    }
+
+    private List<DashboardResponse.LevelDistributionItem> aggregateLevelDistribution(List<LogAggregateView> rows) {
+        return countByDesc(rows, LogAggregateView::logLevel).entrySet().stream()
+                .map(e -> new DashboardResponse.LevelDistributionItem(e.getKey(), e.getValue()))
+                .toList();
+    }
+
+    private List<DashboardResponse.RecentCautionLog> aggregateRecentCautionLogs(List<LogAggregateView> rows) {
+        List<LogAggregateView> recent = rows.stream()
+                .filter(r -> isCaution(r.label()) && r.occurredAt() != null)
+                .sorted(Comparator.comparing(LogAggregateView::occurredAt).reversed())
+                .limit(RECENT_CAUTION_LIMIT)
+                .toList();
+
+        // isAnalysis: 해당 로그에 log_analysis row가 있는지 일괄 조회
+        List<Long> logIds = recent.stream().map(LogAggregateView::id).filter(Objects::nonNull).toList();
+        Set<Long> analyzedIds = logIds.isEmpty()
+                ? Set.of()
+                : new HashSet<>(logAnalysisRepository.findAnalyzedLogIds(logIds));
+
+        // content(TEXT)는 집계 view에서 제외했으므로, 노출 대상 상위 N건만 별도 조회해 채운다.
+        Map<Long, String> contentById = new HashMap<>();
+        if (!logIds.isEmpty()) {
+            for (BglLog log : bglLogRepository.findAllById(logIds)) {
+                contentById.put(log.getId(), log.getContent());
+            }
+        }
+
+        return recent.stream()
+                .map(r -> new DashboardResponse.RecentCautionLog(
+                        r.id(), format(r.occurredAt()), r.node(), r.component(),
+                        r.logLevel(), true,
+                        analyzedIds.contains(r.id()), contentById.get(r.id())))
+                .toList();
+    }
+
+    /** key별 count를 내림차순으로 정렬해 반환. 동등 SQL: {@code GROUP BY key ORDER BY COUNT(*) DESC}. */
+    private static LinkedHashMap<String, Integer> countByDesc(
+            List<LogAggregateView> rows, Function<LogAggregateView, String> key) {
+        Map<String, Integer> counts = new HashMap<>();
+        for (LogAggregateView r : rows) {
+            String k = key.apply(r);
+            if (k != null) {
+                counts.merge(k, 1, Integer::sum);
+            }
+        }
+        LinkedHashMap<String, Integer> ordered = new LinkedHashMap<>();
+        counts.entrySet().stream()
+                .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
+                .forEach(e -> ordered.put(e.getKey(), e.getValue()));
+        return ordered;
+    }
+
+    // ---------------------------------------------------------------------
+    // 범위 echo + 반복 패턴 집계
+    // ---------------------------------------------------------------------
+
+    private DashboardResponse.Range range(LocalDateTime startAt, LocalDateTime endAt) {
+        return new DashboardResponse.Range(format(startAt), format(endAt));
+    }
+
+    /**
+     * 범위 내 분석 결과를 cluster_id별로 카운트해 pattern_view 메타(이름·중요도)와 합친다.
+     * patternId는 cluster 번호와 동일하므로 프론트가 그대로 패턴 상세 조회에 쓸 수 있다.
+     * 미분류(99)는 제외되며, 중요도 내림차순 상위 {@value #RECENT_PATTERN_LIMIT}건만 노출한다.
+     */
+    private List<DashboardResponse.RecentPattern> aggregateRecentPatterns(
+            LocalDateTime startAt, LocalDateTime endAt) {
+        return logAnalysisRepository
+                .findRecentPatternsInRange(startAt, endAt, UNCLASSIFIED_CLUSTER_ID).stream()
+                .limit(RECENT_PATTERN_LIMIT)
+                .map(p -> new DashboardResponse.RecentPattern(
+                        p.getPatternId(),
+                        p.getPatternName(),
+                        (int) p.getCount(),
+                        p.getImportance() != null ? p.getImportance() : 0))
+                .toList();
+    }
+
+    // ---------------------------------------------------------------------
+    // interval 파싱 헬퍼
+    // ---------------------------------------------------------------------
+
+    private Duration parseInterval(String interval) {
+        String normalized = interval.toLowerCase();
+        try {
+            if (normalized.endsWith("m")) {
+                return positiveOrDefault(Duration.ofMinutes(parseIntervalAmount(normalized)));
+            }
+            if (normalized.endsWith("h")) {
+                return positiveOrDefault(Duration.ofHours(parseIntervalAmount(normalized)));
+            }
+            if (normalized.endsWith("d")) {
+                return positiveOrDefault(Duration.ofDays(parseIntervalAmount(normalized)));
+            }
+        } catch (NumberFormatException ignored) {
+            log.info("[Dashboard] unsupported interval value, fallback to 1h. interval={}", interval);
+        }
+        return Duration.ofHours(1);
+    }
+
+    private long parseIntervalAmount(String normalizedInterval) {
+        return Long.parseLong(normalizedInterval.substring(0, normalizedInterval.length() - 1));
+    }
+
+    private Duration positiveOrDefault(Duration duration) {
+        if (duration.isPositive()) {
+            return duration;
+        }
+        log.info("[Dashboard] non-positive interval value, fallback to 1h.");
+        return Duration.ofHours(1);
+    }
+
+    private String format(LocalDateTime dateTime) {
+        return dateTime.format(DATE_TIME_FORMATTER);
+    }
+}
