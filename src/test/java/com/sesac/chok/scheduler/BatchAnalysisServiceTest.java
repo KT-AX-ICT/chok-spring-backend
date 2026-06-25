@@ -84,6 +84,23 @@ class BatchAnalysisServiceTest {
         assertThat(result.requested()).isEqualTo(3);
     }
 
+    @Test
+    void 이미_진행_중이면_두번째_트리거는_건너뛴다() {
+        BatchAnalysisService svc = service();
+        BatchAnalysisResult[] nested = new BatchAnalysisResult[1];
+        // 첫 실행이 진행 중(running=true)일 때 재진입한 두 번째 호출은 CAS에서 막혀 건너뛰어야 한다.
+        given(bglLogRepository.findUnanalyzedFatal(any())).willAnswer(invocation -> {
+            nested[0] = svc.runUnanalyzedFatalAnalysis(100, 20); // 진행 중 재진입
+            return List.of();
+        });
+
+        svc.runUnanalyzedFatalAnalysis(100, 20);
+
+        assertThat(nested[0]).isEqualTo(new BatchAnalysisResult(0, 0, 0));  // 두 번째 트리거 = 건너뜀
+        verify(bglLogRepository, times(1)).findUnanalyzedFatal(any());      // 재진입은 조회까지 안 감(CAS 차단)
+        verifyNoInteractions(fastApiClient);
+    }
+
     private static BglLog fatalLog(Long id) {
         return BglLog.builder()
                 .id(id).occurredAt(TS).node("R01-M0-N0").nodeRepeat("R01-M0-N0")

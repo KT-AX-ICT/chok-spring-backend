@@ -53,6 +53,9 @@ docs/
 ### H2 file DB ###
 data/
 
+### Logs (logback 분석 로그 출력 전용 디렉터리 — log 도메인과 무관) ###
+analysis-log/
+
 ### Tooling ###
 .bkit/
 claude-buddy/

@@ -13,6 +13,7 @@ import com.sesac.chok.integration.fastapi.dto.BatchAnalyzeResponse;
 import com.sesac.chok.integration.fastapi.dto.BatchItemResult;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -28,6 +29,9 @@ import org.springframework.stereotype.Service;
  *
  * <p>실패 격리: chunk 단위(FastAPI 호출 실패)와 항목 단위(개별 저장 실패) 모두 격리해, 한 건 실패가 나머지 진행을
  * 막지 않는다. 실패는 카운트·로그로 남기고 계속 진행한다.
+ *
+ * <p>동시 실행 방지(single-flight): 두 트리거(5분 스케줄러·시작 1회)가 겹쳐 같은 미분석 로그를 둘 다 처리하면
+ * 분석이 중복 저장된다(read-then-write 레이스). CAS 플래그로 한 번에 하나만 돌게 하고, 진행 중이면 건너뛴다.
  */
 @Slf4j
 @Service
@@ -38,6 +42,9 @@ public class BatchAnalysisService {
     private final FastApiClient fastApiClient;
     private final AnalysisService analysisService;
 
+    /** 트리거 동시 실행 방지용 단일 실행 플래그(single-flight). true면 이미 분석이 진행 중. */
+    private final AtomicBoolean running = new AtomicBoolean(false);
+
     /**
      * 미분석 FATAL을 최대 {@code limit}건 조회해 {@code chunkSize}씩 순차로 FastAPI 분석 요청 후 저장한다.
      *
@@ -46,42 +53,51 @@ public class BatchAnalysisService {
      * @return 요청/저장/실패 건수 요약
      */
     public BatchAnalysisResult runUnanalyzedFatalAnalysis(int limit, int chunkSize) {
-        int effectiveChunk = Math.max(chunkSize, 1);
-        List<BglLog> targets = bglLogRepository.findUnanalyzedFatal(PageRequest.of(0, Math.max(limit, 0)));
-        if (targets.isEmpty()) {
-            log.info("[Batch] 미분석 FATAL 없음 — 분석 건너뜀");
+        // 이미 다른 트리거가 분석 중이면 이번 트리거는 건너뛴다(중복 분석 방지). 남은 일감은 다음 주기에 처리.
+        if (!running.compareAndSet(false, true)) {
+            log.info("[Batch] 분석이 이미 진행 중 — 이번 트리거는 건너뜀");
             return new BatchAnalysisResult(0, 0, 0);
         }
-
-        log.info("[Batch] 미분석 FATAL {}건 분석 시작 (chunkSize={})", targets.size(), effectiveChunk);
-        int saved = 0;
-        int failed = 0;
-        for (List<BglLog> chunk : partition(targets, effectiveChunk)) {
-            try {
-                BatchAnalyzeResponse response = fastApiClient.analyzeBatch(toBatchRequest(chunk));
-                for (BatchItemResult item : response.results()) {
-                    if (!item.isSuccess()) {
-                        failed++;
-                        log.warn("[Batch] 분석 항목 실패 logId={} error={}", item.logId(), item.error());
-                        continue;
-                    }
-                    try {
-                        analysisService.saveAnalysisResult(toCommand(item));
-                        saved++;
-                    } catch (Exception e) {
-                        failed++;
-                        log.warn("[Batch] 결과 저장 실패 logId={}", item.logId(), e);
-                    }
-                }
-            } catch (Exception e) {
-                failed += chunk.size();
-                log.error("[Batch] chunk 분석 실패 — 다음 chunk 진행 (chunk={}건)", chunk.size(), e);
+        try {
+            int effectiveChunk = Math.max(chunkSize, 1);
+            List<BglLog> targets = bglLogRepository.findUnanalyzedFatal(PageRequest.of(0, Math.max(limit, 0)));
+            if (targets.isEmpty()) {
+                log.info("[Batch] 미분석 FATAL 없음 — 분석 건너뜀");
+                return new BatchAnalysisResult(0, 0, 0);
             }
-        }
 
-        BatchAnalysisResult result = new BatchAnalysisResult(targets.size(), saved, failed);
-        log.info("[Batch] 분석 완료: {}", result);
-        return result;
+            log.info("[Batch] 미분석 FATAL {}건 분석 시작 (chunkSize={})", targets.size(), effectiveChunk);
+            int saved = 0;
+            int failed = 0;
+            for (List<BglLog> chunk : partition(targets, effectiveChunk)) {
+                try {
+                    BatchAnalyzeResponse response = fastApiClient.analyzeBatch(toBatchRequest(chunk));
+                    for (BatchItemResult item : response.results()) {
+                        if (!item.isSuccess()) {
+                            failed++;
+                            log.warn("[Batch] 분석 항목 실패 logId={} error={}", item.logId(), item.error());
+                            continue;
+                        }
+                        try {
+                            analysisService.saveAnalysisResult(toCommand(item));
+                            saved++;
+                        } catch (Exception e) {
+                            failed++;
+                            log.warn("[Batch] 결과 저장 실패 logId={} cause={}", item.logId(), e.toString());
+                        }
+                    }
+                } catch (Exception e) {
+                    failed += chunk.size();
+                    log.error("[Batch] chunk 분석 실패 — 다음 chunk 진행 (chunk={}건)", chunk.size(), e);
+                }
+            }
+
+            BatchAnalysisResult result = new BatchAnalysisResult(targets.size(), saved, failed);
+            log.info("[Batch] 분석 완료: {}", result);
+            return result;
+        } finally {
+            running.set(false);
+        }
     }
 
     private BatchAnalyzeRequest toBatchRequest(List<BglLog> chunk) {
