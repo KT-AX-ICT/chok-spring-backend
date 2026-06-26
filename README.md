@@ -218,9 +218,6 @@ P0 범위는 다음 흐름을 우선합니다.
 - 프로파일: `dev`(H2 in-memory) / `local`(H2 파일모드, 영속) / `prod`(MySQL)
 - Security permit-all, CORS(Vite/React), H2 console, MySQL Docker Compose, 전역 예외 처리
 - 패키지별 담당/책임 README
-
-진행 중 / 미병합:
-
 - 대시보드 집계 API (`domain.dashboard`) — 별도 브랜치 작업 중
-- 실 FastAPI 분석 파이프라인과의 end-to-end 연동 튜닝 (배치 20 / 동시 5)
-- 라벨 기반 정확도(Precision/Recall/F1) 산출물
+- 실 FastAPI 분석 파이프라인과의 end-to-end 연동 튜닝 (배치 200 / 동시 5)
+
