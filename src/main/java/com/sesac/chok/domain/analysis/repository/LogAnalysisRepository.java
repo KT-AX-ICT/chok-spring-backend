@@ -18,7 +18,7 @@ public interface LogAnalysisRepository extends JpaRepository<LogAnalysis, Long> 
      * 정본은 {@code bgl_log.is_abnormal}이며 정상(false)·미분석(null) 분석은 제외한다.
      * <p>다중 nullable 필터(미지정=null이면 조건 제외): 날짜는 {@code log.occurredAt} 반열린
      * 구간 {@code [startAt, endAt)}, {@code riskLevel}은 단일 정확 일치, keyword는
-     * summary·analysis·action OR 부분검색.
+     * summary·analysis·action OR 부분검색, {@code clusterId}는 패턴 단일 정확 일치.
      */
     @EntityGraph(attributePaths = "log")
     @Query(value = """
@@ -27,6 +27,7 @@ public interface LogAnalysisRepository extends JpaRepository<LogAnalysis, Long> 
               AND (:startAt   IS NULL OR a.log.occurredAt >= :startAt)
               AND (:endAt     IS NULL OR a.log.occurredAt <  :endAt)
               AND (:riskLevel IS NULL OR a.riskLevel = :riskLevel)
+              AND (:clusterId IS NULL OR a.clusterId = :clusterId)
               AND (:keyword   IS NULL
                OR a.summary  LIKE CONCAT('%', :keyword, '%')
                OR a.analysis LIKE CONCAT('%', :keyword, '%')
@@ -38,6 +39,7 @@ public interface LogAnalysisRepository extends JpaRepository<LogAnalysis, Long> 
               AND (:startAt   IS NULL OR a.log.occurredAt >= :startAt)
               AND (:endAt     IS NULL OR a.log.occurredAt <  :endAt)
               AND (:riskLevel IS NULL OR a.riskLevel = :riskLevel)
+              AND (:clusterId IS NULL OR a.clusterId = :clusterId)
               AND (:keyword   IS NULL
                OR a.summary  LIKE CONCAT('%', :keyword, '%')
                OR a.analysis LIKE CONCAT('%', :keyword, '%')
@@ -48,6 +50,7 @@ public interface LogAnalysisRepository extends JpaRepository<LogAnalysis, Long> 
             @Param("endAt") LocalDateTime endAt,
             @Param("riskLevel") String riskLevel,
             @Param("keyword") String keyword,
+            @Param("clusterId") Long clusterId,
             Pageable pageable);
 
     /** 위험도 분포 집계 projection. */

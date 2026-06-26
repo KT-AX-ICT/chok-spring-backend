@@ -37,7 +37,8 @@ public class AnalysisService {
 
     public PageResponse<AnalysisDto> getAnalysisList(AnalysisSearchCondition condition, Pageable pageable) {
         Page<LogAnalysis> page = logAnalysisRepository.search(
-                condition.startAt(), condition.endAt(), condition.riskLevel(), condition.keyword(), pageable);
+                condition.startAt(), condition.endAt(), condition.riskLevel(), condition.keyword(),
+                condition.clusterId(), pageable);
         Map<Long, String> patternNames = resolvePatternNames(page.getContent());
         return PageResponse.of(page.map(entity -> toDto(entity, patternNames)));
     }

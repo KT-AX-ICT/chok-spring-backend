@@ -60,12 +60,12 @@ class AnalysisServiceTest {
                 .createdAt(LocalDateTime.of(2026, 6, 18, 8, 31, 5))
                 .build();
         Pageable pageable = PageRequest.of(0, 50);
-        given(logAnalysisRepository.search(null, null, null, null, pageable))
+        given(logAnalysisRepository.search(null, null, null, null, null, pageable))
                 .willReturn(new PageImpl<>(List.of(entity), pageable, 1));
         given(patternViewRepository.findAllById(List.of(12L)))
                 .willReturn(List.of(PatternView.builder().id(12L).patternName("Data TLB Error").build()));
 
-        PageResponse<AnalysisDto> result = analysisService.getAnalysisList(new AnalysisSearchCondition(null, null, null, null), pageable);
+        PageResponse<AnalysisDto> result = analysisService.getAnalysisList(new AnalysisSearchCondition(null, null, null, null, null), pageable);
 
         assertThat(result.totalElements()).isEqualTo(1);
         assertThat(result.content()).hasSize(1);
@@ -103,10 +103,10 @@ class AnalysisServiceTest {
                 .createdAt(LocalDateTime.of(2026, 6, 18, 9, 1, 0))
                 .build();
         Pageable pageable = PageRequest.of(0, 50);
-        given(logAnalysisRepository.search(null, null, null, null, pageable))
+        given(logAnalysisRepository.search(null, null, null, null, null, pageable))
                 .willReturn(new PageImpl<>(List.of(entity), pageable, 1));
 
-        AnalysisDto dto = analysisService.getAnalysisList(new AnalysisSearchCondition(null, null, null, null), pageable).content().get(0);
+        AnalysisDto dto = analysisService.getAnalysisList(new AnalysisSearchCondition(null, null, null, null, null), pageable).content().get(0);
 
         assertThat(dto.log().isCaution()).isFalse();
         assertThat(dto.responsePlan()).containsExactly("점검 불필요");
