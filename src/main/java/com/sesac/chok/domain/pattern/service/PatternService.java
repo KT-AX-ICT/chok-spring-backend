@@ -7,11 +7,11 @@ import com.sesac.chok.domain.log.entity.BglLog;
 import com.sesac.chok.domain.pattern.dto.PatternDetail;
 import com.sesac.chok.domain.pattern.dto.PatternListResponse;
 import com.sesac.chok.domain.pattern.dto.PatternSummary;
+import com.sesac.chok.domain.pattern.dto.RiskLevelCount;
 import com.sesac.chok.domain.pattern.entity.PatternView;
 import com.sesac.chok.domain.pattern.repository.PatternViewRepository;
 import com.sesac.chok.global.error.NotFoundException;
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -72,7 +72,8 @@ public class PatternService {
                 .orElseThrow(() -> NotFoundException.of("pattern_view", patternId));
 
         List<LogAnalysis> analyses = logAnalysisRepository.findByClusterIdOrderByLog_OccurredAtDesc(patternId);
-        String riskLevel = maxSeverityRiskLevel(analyses);
+        List<RiskLevelCount> riskLevel = toRiskBreakdown(
+                analyses.stream().map(LogAnalysis::getRiskLevel).toList());
         List<LogSummary> relatedLogs = analyses.stream()
                 .map(a -> toLogSummary(a.getLog(), a.getRiskLevel()))
                 .toList();
@@ -92,25 +93,16 @@ public class PatternService {
                 riskLevel != null ? 1L : null);
     }
 
-    /** risk_level → 심각도 ordinal(긴급4·높음3·보통2·낮음1, 미상/null=0). */
-    private int severityOf(String riskLevel) {
-        int idx = SEVERITY_DESC.indexOf(riskLevel);
-        return idx < 0 ? 0 : SEVERITY_DESC.size() - idx;
-    }
-
     /** 심각도 ordinal → risk_level 한글값(1..4만 유효, 그 외 null). */
     private String riskLevelOf(int severity) {
         return (severity >= 1 && severity <= 4) ? SEVERITY_DESC.get(SEVERITY_DESC.size() - severity) : null;
     }
 
-    /** 분석들의 risk_level 중 최고 심각도 한 건(없으면 null). */
-    private String maxSeverityRiskLevel(List<LogAnalysis> analyses) {
-        return analyses.stream()
-                .map(LogAnalysis::getRiskLevel)
-                .filter(Objects::nonNull)
-                .filter(rl -> severityOf(rl) >= 1)
-                .max(Comparator.comparingInt(this::severityOf))
-                .orElse(null);
+    /** 분석들의 risk_level을 4단계(긴급/높음/보통/낮음) 고정·심각도 내림차순 건수 list로 변환. */
+    private List<RiskLevelCount> toRiskBreakdown(Collection<String> riskLevels) {
+        return summarizeRiskLevels(riskLevels).entrySet().stream()
+                .map(e -> new RiskLevelCount(e.getKey(), e.getValue()))
+                .toList();
     }
 
     /** 패턴 riskLevel 값들을 4단계(긴급/높음/보통/낮음)별 패턴 수로 집계(각 키 0 기본, null 제외). */

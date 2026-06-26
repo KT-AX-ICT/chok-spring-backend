@@ -106,7 +106,16 @@ class PatternIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.patternId").value(1))
                 .andExpect(jsonPath("$.patternName").value("TLB Error"))
-                .andExpect(jsonPath("$.riskLevel").value("긴급")) // 관련 분석 높음·긴급 중 최고 심각도
+                // riskLevel: 4단계 고정·심각도 내림차순(긴급/높음/보통/낮음)별 건수, 관련 분석 긴급1·높음1
+                .andExpect(jsonPath("$.riskLevel.length()").value(4))
+                .andExpect(jsonPath("$.riskLevel[0].riskLevel").value("긴급"))
+                .andExpect(jsonPath("$.riskLevel[0].count").value(1))
+                .andExpect(jsonPath("$.riskLevel[1].riskLevel").value("높음"))
+                .andExpect(jsonPath("$.riskLevel[1].count").value(1))
+                .andExpect(jsonPath("$.riskLevel[2].riskLevel").value("보통"))
+                .andExpect(jsonPath("$.riskLevel[2].count").value(0))
+                .andExpect(jsonPath("$.riskLevel[3].riskLevel").value("낮음"))
+                .andExpect(jsonPath("$.riskLevel[3].count").value(0))
                 .andExpect(jsonPath("$.relatedLogs").isArray())
                 // occurredAt DESC → logLate(09:30) 먼저
                 .andExpect(jsonPath("$.relatedLogs[0].node").value("node-B"))
