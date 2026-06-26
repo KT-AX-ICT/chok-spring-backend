@@ -28,7 +28,7 @@ import org.springframework.transaction.annotation.Transactional;
  * 대시보드 집계 서비스.
  *
  * <p>{@link BglLogRepository}에서 {@code [startAt, endAt)} 범위의 로그를 한 번 조회해, 그 위에서
- * 시간대 버킷팅·label 기반 caution 카운트·key별 분포·최근 주의 로그를 Java로 집계한다.
+ * 시간대 버킷팅·isAbnormal 기반 caution 카운트·key별 분포·최근 주의 로그를 Java로 집계한다.
  * interval이 가변(1h/5m/1d)이고 H2·MySQL을 모두 쓰므로 DB 날짜함수 대신 Java 버킷팅을 쓴다(이식성).
  *
  * <p>BglLog로 만드는 필드(총/주의 카운트, timeSeries, type/component/level 분포)와
@@ -42,7 +42,6 @@ import org.springframework.transaction.annotation.Transactional;
 public class DashboardService {
 
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
-    private static final String NORMAL_LABEL = "-";
     private static final int RECENT_CAUTION_LIMIT = 5;
     private static final int RECENT_PATTERN_LIMIT = 5;
     private static final int MAX_BUCKETS = 200;
@@ -98,13 +97,14 @@ public class DashboardService {
     // 집계 로직 (BglLog 단일 입력 기준)
     // ---------------------------------------------------------------------
 
-    private static boolean isCaution(String label) {
-        return label != null && !NORMAL_LABEL.equals(label);
+    /** 주의 여부: 2차 판정 {@code isAbnormal=TRUE}. label(답지)이 아닌 분석 결과 기준 (정본 규칙은 BglLog). */
+    private static boolean isCaution(LogAggregateView row) {
+        return Boolean.TRUE.equals(row.isAbnormal());
     }
 
     private DashboardResponse.Stats aggregateStats(List<LogAggregateView> rows, int analyzedCount, int normalCount) {
         int total = rows.size();
-        int caution = (int) rows.stream().filter(r -> isCaution(r.label())).count();
+        int caution = (int) rows.stream().filter(DashboardService::isCaution).count();
         return new DashboardResponse.Stats(total, caution, analyzedCount, normalCount);
     }
 
@@ -183,7 +183,7 @@ public class DashboardService {
                 idx = n - 1; // 경계/반올림 오차로 마지막을 살짝 넘는 경우, 마지막 막대에 넣어 누락을 막는다.
             }
             total[idx]++;
-            if (isCaution(r.label())) {
+            if (isCaution(r)) {
                 caution[idx]++;
             }
         }
@@ -220,7 +220,7 @@ public class DashboardService {
 
     private List<DashboardResponse.RecentCautionLog> aggregateRecentCautionLogs(List<LogAggregateView> rows) {
         List<LogAggregateView> recent = rows.stream()
-                .filter(r -> isCaution(r.label()) && r.occurredAt() != null)
+                .filter(r -> isCaution(r) && r.occurredAt() != null)
                 .sorted(Comparator.comparing(LogAggregateView::occurredAt).reversed())
                 .limit(RECENT_CAUTION_LIMIT)
                 .toList();

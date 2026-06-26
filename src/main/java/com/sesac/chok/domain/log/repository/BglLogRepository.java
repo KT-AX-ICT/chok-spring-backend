@@ -89,7 +89,7 @@ public interface BglLogRepository extends JpaRepository<BglLog, Long> {
      * 다시 정렬하므로 SQL 정렬 단계가 불필요하다.
      */
     @Query("SELECT new com.sesac.chok.domain.log.dto.LogAggregateView("
-            + "b.id, b.occurredAt, b.label, b.node, b.component, b.logType, b.logLevel) "
+            + "b.id, b.occurredAt, b.isAbnormal, b.node, b.component, b.logType, b.logLevel) "
             + "FROM BglLog b "
             + "WHERE b.occurredAt >= :startAt AND b.occurredAt < :endAt")
     List<LogAggregateView> findAggregateViewInRange(
