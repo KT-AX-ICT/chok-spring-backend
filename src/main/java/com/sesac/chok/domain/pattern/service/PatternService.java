@@ -7,6 +7,7 @@ import com.sesac.chok.domain.log.entity.BglLog;
 import com.sesac.chok.domain.pattern.dto.PatternDetail;
 import com.sesac.chok.domain.pattern.dto.PatternListResponse;
 import com.sesac.chok.domain.pattern.dto.PatternSummary;
+import com.sesac.chok.domain.pattern.dto.PatternSummary.RiskCount;
 import com.sesac.chok.domain.pattern.entity.PatternView;
 import com.sesac.chok.domain.pattern.repository.PatternViewRepository;
 import com.sesac.chok.global.error.NotFoundException;
@@ -44,12 +45,26 @@ public class PatternService {
                 .collect(Collectors.toMap(r -> r.getClusterId(), r -> riskLevelOf(r.getSeverity())));
         // riskLevelSummary는 전체 패턴 분포(필터와 무관한 메타 정보)로 유지한다.
         Map<String, Long> riskLevelSummary = summarizeRiskLevels(riskLevelByCluster.values());
+        // 패턴별 위험도 분포(riskCounts). 행이 있는 위험도만 담는다(0건 합성 없음).
+        Map<Long, List<RiskCount>> riskCountsByCluster = resolveRiskCounts();
 
         Page<PatternSummary> page = (riskLevel == null || riskLevel.isBlank())
                 ? patternViewRepository.findAll(pageable)
-                        .map(p -> toSummary(p, countMap.getOrDefault(p.getId(), 0L), riskLevelByCluster.get(p.getId())))
-                : filterByRiskLevel(riskLevel, countMap, riskLevelByCluster, pageable);
+                        .map(p -> toSummary(p, countMap.getOrDefault(p.getId(), 0L),
+                                riskLevelByCluster.get(p.getId()), riskCountsByCluster))
+                : filterByRiskLevel(riskLevel, countMap, riskLevelByCluster, riskCountsByCluster, pageable);
         return PatternListResponse.of(page, riskLevelSummary);
+    }
+
+    /**
+     * {@code cluster_id}별 위험도 분포({@link RiskCount} 목록)를 한 번에 집계해 맵으로 돌려준다.
+     * 행이 존재하는 위험도만 담는다(누락 단계는 프런트가 0으로 채움).
+     */
+    private Map<Long, List<RiskCount>> resolveRiskCounts() {
+        return logAnalysisRepository.countGroupByClusterIdAndRiskLevel().stream()
+                .collect(Collectors.groupingBy(
+                        r -> (Long) r[0],
+                        Collectors.mapping(r -> new RiskCount((String) r[1], (Long) r[2]), Collectors.toList())));
     }
 
     /**
@@ -57,9 +72,10 @@ public class PatternService {
      * in-memory로 필터·페이징한다(pattern_view는 소량 고정 카탈로그).
      */
     private Page<PatternSummary> filterByRiskLevel(String riskLevel, Map<Long, Long> countMap,
-            Map<Long, String> riskLevelByCluster, Pageable pageable) {
+            Map<Long, String> riskLevelByCluster, Map<Long, List<RiskCount>> riskCountsByCluster, Pageable pageable) {
         List<PatternSummary> filtered = patternViewRepository.findAll(pageable.getSort()).stream()
-                .map(p -> toSummary(p, countMap.getOrDefault(p.getId(), 0L), riskLevelByCluster.get(p.getId())))
+                .map(p -> toSummary(p, countMap.getOrDefault(p.getId(), 0L),
+                        riskLevelByCluster.get(p.getId()), riskCountsByCluster))
                 .filter(s -> riskLevel.equals(s.riskLevel()))
                 .toList();
         int start = (int) Math.min(pageable.getOffset(), filtered.size());
@@ -81,9 +97,11 @@ public class PatternService {
                 pattern.getEventTemplate(), pattern.getImportance(), riskLevel, relatedLogs);
     }
 
-    private PatternSummary toSummary(PatternView p, Long count, String riskLevel) {
+    private PatternSummary toSummary(PatternView p, Long count, String riskLevel,
+            Map<Long, List<RiskCount>> riskCountsByCluster) {
         return new PatternSummary(p.getId(), p.getPatternName(), p.getDescription(),
-                p.getEventTemplate(), p.getImportance(), count, riskLevel);
+                p.getEventTemplate(), p.getImportance(), count, riskLevel,
+                riskCountsByCluster.getOrDefault(p.getId(), List.of()));
     }
 
     private LogSummary toLogSummary(BglLog log, String riskLevel) {

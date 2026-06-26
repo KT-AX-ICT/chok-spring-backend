@@ -113,6 +113,15 @@ public interface LogAnalysisRepository extends JpaRepository<LogAnalysis, Long> 
     @Query("SELECT a.clusterId, COUNT(a) FROM LogAnalysis a WHERE a.clusterId IS NOT NULL GROUP BY a.clusterId")
     List<Object[]> countGroupByClusterId();
 
+    /**
+     * 패턴 목록(§3.5): 패턴별 risk_level 분포를 집계한다. clusterId=null(정상 로그)은 제외.
+     * 행이 존재하는 (clusterId, riskLevel) 조합만 돌려준다(0건 합성 없음 — 프런트가 누락 단계를 0으로 채움).
+     * 반환 형식: {@code [clusterId(Long), riskLevel(String), count(Long)]}.
+     */
+    @Query("SELECT a.clusterId, a.riskLevel, COUNT(a) FROM LogAnalysis a "
+            + "WHERE a.clusterId IS NOT NULL GROUP BY a.clusterId, a.riskLevel")
+    List<Object[]> countGroupByClusterIdAndRiskLevel();
+
     /** 패턴(cluster)별 최고 심각도 projection. severity ordinal: 긴급4·높음3·보통2·낮음1. */
     interface ClusterRiskLevel {
         Long getClusterId();
