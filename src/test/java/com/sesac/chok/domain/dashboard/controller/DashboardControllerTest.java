@@ -105,15 +105,15 @@ class DashboardControllerTest {
     }
 
     @Test
-    void getDashboardSummaryAggregatesBglLogRowsByBucketAndLabel() throws Exception {
-        // 09:00~21:00 / 6h → 버킷 2개: [09,15), [15,21)
+    void getDashboardSummaryAggregatesBglLogRowsByBucketAndAbnormal() throws Exception {
+        // 09:00~21:00 / 6h → 버킷 2개: [09,15), [15,21). 주의(isAbnormal=TRUE)는 logId 2·4뿐.
         given(bglLogRepository.findAggregateViewInRange(any(), any()))
                 .willReturn(List.of(
-                        row(1L, "2026-06-19T10:00:00", "-", "INFO"),
-                        row(2L, "2026-06-19T11:00:00", "KERNDTLB", "FATAL"),
-                        row(3L, "2026-06-19T16:00:00", "-", "INFO"),
-                        row(4L, "2026-06-19T17:00:00", "APPREAD", "FATAL"),
-                        row(5L, "2026-06-19T18:00:00", "-", "WARNING")
+                        row(1L, "2026-06-19T10:00:00", false, "INFO"),
+                        row(2L, "2026-06-19T11:00:00", true, "FATAL"),
+                        row(3L, "2026-06-19T16:00:00", false, "INFO"),
+                        row(4L, "2026-06-19T17:00:00", true, "FATAL"),
+                        row(5L, "2026-06-19T18:00:00", false, "WARNING")
                 ));
         // 분석 결과: 긴급 1 + 높음 1 + 정상(riskLevel=null) 3 = 분석 완료 5건(정상 3), logId 4만 분석됨
         given(logAnalysisRepository.countByRiskLevelInRange(any(), any()))
@@ -127,7 +127,7 @@ class DashboardControllerTest {
                         .param("interval", "6h"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.stats.totalLogCount").value(5))
-                .andExpect(jsonPath("$.stats.cautionLogCount").value(2))
+                .andExpect(jsonPath("$.stats.cautionLogCount").value(2)) // isAbnormal=TRUE: logId 2·4
                 .andExpect(jsonPath("$.stats.analyzedLogCount").value(5)) // 정상 3 포함
                 .andExpect(jsonPath("$.stats.normalLogCount").value(3))
                 .andExpect(jsonPath("$.timeSeries.length()").value(2))
@@ -175,9 +175,9 @@ class DashboardControllerTest {
         // 끝부분(23:30) 로그까지 막대에 전부 들어가야 한다(무음 절단 없음).
         given(bglLogRepository.findAggregateViewInRange(any(), any()))
                 .willReturn(List.of(
-                        row(1L, "2026-06-19T00:30:00", "-", "INFO"),
-                        row(2L, "2026-06-19T12:00:00", "-", "INFO"),
-                        row(3L, "2026-06-19T23:30:00", "KERNDTLB", "FATAL")));
+                        row(1L, "2026-06-19T00:30:00", false, "INFO"),
+                        row(2L, "2026-06-19T12:00:00", false, "INFO"),
+                        row(3L, "2026-06-19T23:30:00", true, "FATAL")));
 
         MvcResult result = mockMvc.perform(get(DASHBOARD_SUMMARY_URL)
                         .param("startAt", "2026-06-19T00:00:00")
@@ -235,8 +235,8 @@ class DashboardControllerTest {
         };
     }
 
-    private static LogAggregateView row(long id, String occurredAt, String label, String logLevel) {
-        return new LogAggregateView(id, LocalDateTime.parse(occurredAt), label,
+    private static LogAggregateView row(long id, String occurredAt, Boolean isAbnormal, String logLevel) {
+        return new LogAggregateView(id, LocalDateTime.parse(occurredAt), isAbnormal,
                 "R01-M0-N0", "KERNEL", "RAS", logLevel);
     }
 }

@@ -18,7 +18,10 @@ public record DashboardResponse(
     }
 
     /**
-     * {@code analyzedLogCount}는 분석 완료 전체 수(정상 포함)이고, {@code normalLogCount}는 그 중 정상 판정
+     * {@code cautionLogCount}는 판정결과가 '이상'({@code isAbnormal=TRUE})인 로그 수다. label(답지)이 아닌
+     * 2차 판정 기준이며, 같은 응답의 {@code timeSeries.cautionCount}·{@code recentCautionLogs}도 동일 기준이다.
+     *
+     * <p>{@code analyzedLogCount}는 분석 완료 전체 수(정상 포함)이고, {@code normalLogCount}는 그 중 정상 판정
      * (riskLevel 없음) 수다. 따라서 {@code analyzedLogCount = riskDistribution 합 + normalLogCount}이며,
      * riskDistribution(긴급/높음/보통/낮음)은 이상 판정만 담는다.
      */
